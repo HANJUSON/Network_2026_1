@@ -1,0 +1,69 @@
+# HFT Exchange Server
+
+고주파 거래(HFT) 시뮬레이션을 위한 거래소 서버입니다.
+
+## 프로젝트 구조
+
+```
+hft_server/
+├── main_server.py              # 서버 진입점
+├── config/
+│   └── server_settings.json    # 서버 설정
+├── src/
+│   ├── __init__.py
+│   ├── order_book.py           # 주문 book 및 거래소 상태
+│   ├── matcher.py              # 주문 체결 로직
+│   └── handler.py              # 요청 처리 및 응답
+└── logs/                       # 로그 저장
+```
+
+## 설치
+
+Python 표준 라이브러리만 사용하므로 별도 설치가 필요 없습니다.
+
+```bash
+python main_server.py
+```
+
+## 사용법
+
+### 기본 실행
+
+```bash
+python main_server.py
+```
+
+### 비동기 모드 (대규모 동시 연결)
+
+```bash
+python main_server.py --mode async
+```
+
+### 더미 모드 (시뮬레이션)
+
+```bash
+python main_server.py --dummy
+```
+
+### 커스텀 포트
+
+```bash
+python main_server.py --port 9999
+```
+
+## 설정
+
+`config/server_settings.json` 파일을 편집하여 서버 설정을 변경할 수 있습니다.
+
+## 클라이언트와 함께 사용
+
+1. 먼저 서버 실행:
+   ```bash
+   python main_server.py
+   ```
+
+2. 클라이언트 실행 (별도 터미널):
+   ```bash
+   cd ../hft_client
+   python main.py
+   ```

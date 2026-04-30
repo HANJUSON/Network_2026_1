@@ -1,0 +1,29 @@
+{
+    "server": {
+        "host": "0.0.0.0",
+        "port": 8888,
+        "backlog": 100,
+        "max_connections": 1000
+    },
+    "performance": {
+        "tcp_nodelay": true,
+        "so_reuseaddr": true,
+        "buffer_size": 65536
+    },
+    "order_book": {
+        "symbols": ["BTC-USD", "ETH-USD", "AAPL", "GOOGL", "MSFT"],
+        "price_precision": 2,
+        "max_order_size": 10000,
+        "min_order_size": 1
+    },
+    "logging": {
+        "level": "INFO",
+        "log_file": "logs/server.log"
+    },
+    "simulation": {
+        "enabled": false,
+        "min_latency_us": 100,
+        "max_latency_us": 500,
+        "drop_rate": 0.0
+    }
+}

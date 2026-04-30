@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HFT Trading Client</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>HFT Trading Client</h1>
+            <div class="connection-status">
+                <span id="connection-indicator" class="indicator"></span>
+                <span id="connection-text">Disconnected</span>
+            </div>
+        </header>
+
+        <div class="control-panel">
+            <div class="control-group">
+                <label>Server</label>
+                <input type="text" id="server-host" value="127.0.0.1" placeholder="Host">
+                <input type="number" id="server-port" value="8888" placeholder="Port">
+            </div>
+            <div class="control-group">
+                <label>Protocol</label>
+                <select id="protocol">
+                    <option value="tcp">TCP</option>
+                    <option value="udp">UDP</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>Orders</label>
+                <input type="number" id="orders-per-sec" value="100" min="1" max="10000">
+                <span class="unit">orders/sec</span>
+            </div>
+            <div class="button-group">
+                <button id="start-btn" class="btn btn-start">Start Trading</button>
+                <button id="stop-btn" class="btn btn-stop" disabled>Stop Trading</button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Total Orders</div>
+                <div class="stat-value" id="total-orders">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Orders/sec</div>
+                <div class="stat-value" id="orders-per-sec-display">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Avg Latency</div>
+                <div class="stat-value" id="avg-latency">0 <span class="unit">μs</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">P99 Latency</div>
+                <div class="stat-value" id="p99-latency">0 <span class="unit">μs</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Success Rate</div>
+                <div class="stat-value" id="success-rate">100<span class="unit">%</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Server Status</div>
+                <div class="stat-value" id="server-status">-</div>
+            </div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-container">
+                <h3>Latency Over Time</h3>
+                <canvas id="latency-chart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3>Orders Per Second</h3>
+                <canvas id="ops-chart"></canvas>
+            </div>
+        </div>
+
+        <div class="log-section">
+            <h3>Trade Log</h3>
+            <div class="log-container" id="log-container">
+                <table class="log-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Order ID</th>
+                            <th>Symbol</th>
+                            <th>Side</th>
+                            <th>Price</th>
+                            <th>Qty</th>
+                            <th>Status</th>
+                            <th>Latency</th>
+                        </tr>
+                    </thead>
+                    <tbody id="log-body">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

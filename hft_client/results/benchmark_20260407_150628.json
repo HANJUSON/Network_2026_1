@@ -1,0 +1,64 @@
+[
+  {
+    "timestamp": "2026-04-07T15:06:16.818555",
+    "protocol": "tcp",
+    "num_orders": 10000,
+    "interval_us": 100,
+    "stats": {
+      "count": 10000,
+      "min_ns": 340400,
+      "max_ns": 1367500,
+      "mean_ns": 616068.29,
+      "median_ns": 544200.0,
+      "std_ns": 164717.312577586,
+      "p50_ns": 544200,
+      "p75_ns": 598800,
+      "p90_ns": 998700,
+      "p95_ns": 1054300,
+      "p99_ns": 1142900,
+      "p999_ns": 1293500
+    },
+    "metadata": {
+      "host": "127.0.0.1",
+      "port": 8888,
+      "symbols": [
+        "BTC-USD",
+        "ETH-USD",
+        "AAPL",
+        "GOOGL",
+        "MSFT"
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-04-07T15:06:28.400501",
+    "protocol": "udp",
+    "num_orders": 10000,
+    "interval_us": 100,
+    "stats": {
+      "count": 10000,
+      "min_ns": 317700,
+      "max_ns": 1418700,
+      "mean_ns": 623580.17,
+      "median_ns": 544500.0,
+      "std_ns": 167736.07658136575,
+      "p50_ns": 544500,
+      "p75_ns": 606800,
+      "p90_ns": 993700,
+      "p95_ns": 1059500,
+      "p99_ns": 1181900,
+      "p999_ns": 1340300
+    },
+    "metadata": {
+      "host": "127.0.0.1",
+      "port": 8888,
+      "symbols": [
+        "BTC-USD",
+        "ETH-USD",
+        "AAPL",
+        "GOOGL",
+        "MSFT"
+      ]
+    }
+  }
+]

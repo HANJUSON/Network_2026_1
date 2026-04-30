@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HFT Trading Dashboard</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #0f1419; color: #e7e9ea; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        h1 { font-size: 24px; color: #1d9bf0; }
+        
+        .status-bar { display: flex; gap: 20px; align-items: center; }
+        .status-indicator { display: flex; align-items: center; gap: 8px; }
+        .indicator { width: 10px; height: 10px; border-radius: 50%; background: #f4212e; }
+        .indicator.active { background: #00ba7c; }
+        
+        .controls { display: flex; gap: 10px; margin-bottom: 20px; }
+        button { padding: 10px 20px; border: none; border-radius: 20px; cursor: pointer; font-weight: bold; }
+        .btn-start { background: #00ba7c; color: white; }
+        .btn-stop { background: #f4212e; color: white; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .pnl-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
+        .pnl-card { background: #16181c; padding: 20px; border-radius: 12px; text-align: center; }
+        .pnl-card .label { color: #71767b; font-size: 14px; margin-bottom: 8px; }
+        .pnl-card .value { font-size: 28px; font-weight: bold; }
+        .pnl-card .value.positive { color: #00ba7c; }
+        .pnl-card .value.negative { color: #f4212e; }
+        
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        
+        .section { background: #16181c; border-radius: 12px; padding: 20px; }
+        .section h3 { margin-bottom: 15px; color: #71767b; font-size: 14px; text-transform: uppercase; }
+        
+        .price-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+        .price-card { background: #0f1419; padding: 15px; border-radius: 8px; text-align: center; }
+        .price-card .symbol { color: #71767b; font-size: 12px; }
+        .price-card .price { font-size: 20px; font-weight: bold; margin: 5px 0; }
+        .price-card .change { font-size: 14px; }
+        .positive { color: #00ba7c; }
+        .negative { color: #f4212e; }
+        
+        .signal-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+        .signal-card { background: #0f1419; padding: 15px; border-radius: 8px; }
+        .signal-card .symbol { color: #71767b; font-size: 12px; margin-bottom: 8px; }
+        .signal-card .signal { font-size: 18px; font-weight: bold; padding: 8px; border-radius: 4px; text-align: center; }
+        .signal-card .signal.buy { background: rgba(0, 186, 124, 0.2); color: #00ba7c; }
+        .signal-card .signal.sell { background: rgba(244, 33, 46, 0.2); color: #f4212e; }
+        .signal-card .signal.hold { background: rgba(113, 118, 123, 0.2); color: #71767b; }
+        .signal-card .reason { font-size: 11px; color: #71767b; margin-top: 5px; }
+        
+        .position-table { width: 100%; border-collapse: collapse; }
+        .position-table th, .position-table td { padding: 12px; text-align: left; border-bottom: 1px solid #2f3336; }
+        .position-table th { color: #71767b; font-size: 12px; }
+        .position-table td { font-size: 14px; }
+        
+        .order-table { width: 100%; border-collapse: collapse; max-height: 300px; overflow-y: auto; }
+        .order-table th, .order-table td { padding: 10px; text-align: left; border-bottom: 1px solid #2f3336; font-size: 12px; }
+        .order-table th { color: #71767b; position: sticky; top: 0; background: #16181c; }
+        
+        .stats-row { display: flex; gap: 30px; margin-top: 15px; }
+        .stat-item { text-align: center; }
+        .stat-item .label { color: #71767b; font-size: 12px; }
+        .stat-item .value { font-size: 18px; font-weight: bold; }
+        
+        .chart-container { height: 300px; margin-top: 15px; }
+        .chart-tabs { display: flex; gap: 10px; margin-bottom: 10px; }
+        .chart-tab { padding: 5px 15px; background: #0f1419; border: none; border-radius: 15px; color: #71767b; cursor: pointer; font-size: 12px; }
+        .chart-tab.active { background: #1d9bf0; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>HFT Trading Dashboard</h1>
+            <div class="status-bar">
+                <div class="status-indicator">
+                    <div class="indicator" id="connection-indicator"></div>
+                    <span id="connection-text">Disconnected</span>
+                </div>
+                <div class="status-indicator">
+                    <div class="indicator" id="trading-indicator"></div>
+                    <span id="trading-text">Stopped</span>
+                </div>
+            </div>
+        </header>
+        
+        <div class="controls">
+            <button class="btn-start" id="start-btn" onclick="startTrading()">Start Trading</button>
+            <button class="btn-stop" id="stop-btn" onclick="stopTrading()" disabled>Stop Trading</button>
+        </div>
+        
+        <div class="pnl-grid">
+            <div class="pnl-card">
+                <div class="label">Total P&L</div>
+                <div class="value" id="total-pnl">$0.00</div>
+            </div>
+            <div class="pnl-card">
+                <div class="label">Realized P&L</div>
+                <div class="value" id="realized-pnl">$0.00</div>
+            </div>
+            <div class="pnl-card">
+                <div class="label">Unrealized P&L</div>
+                <div class="value" id="unrealized-pnl">$0.00</div>
+            </div>
+            <div class="pnl-card">
+                <div class="label">Total Orders</div>
+                <div class="value" id="total-orders">0</div>
+            </div>
+        </div>
+        
+        <div class="grid-2">
+            <div class="section">
+                <h3>Real-time Prices</h3>
+                <div class="price-grid" id="price-grid"></div>
+            </div>
+            <div class="section">
+                <h3>Trading Signals</h3>
+                <div class="signal-grid" id="signal-grid"></div>
+            </div>
+        </div>
+        
+        <div class="grid-2">
+            <div class="section">
+                <h3>Positions</h3>
+                <table class="position-table">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Quantity</th>
+                            <th>Avg Price</th>
+                            <th>Current</th>
+                            <th>P&L</th>
+                        </tr>
+                    </thead>
+                    <tbody id="position-body"></tbody>
+                </table>
+            </div>
+            <div class="section">
+                <h3>Statistics</h3>
+                <div class="stats-row">
+                    <div class="stat-item">
+                        <div class="label">Buy Orders</div>
+                        <div class="value" id="buy-orders">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">Sell Orders</div>
+                        <div class="value" id="sell-orders">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">Avg Latency</div>
+                        <div class="value" id="avg-latency">0 ms</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h3>Recent Orders</h3>
+            <table class="order-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Order ID</th>
+                        <th>Symbol</th>
+                        <th>Side</th>
+                        <th>Price</th>
+                        <th>Qty</th>
+                        <th>Latency</th>
+                    </tr>
+                </thead>
+                <tbody id="order-body"></tbody>
+            </table>
+        </div>
+        
+        <div class="section">
+            <h3>Price Chart</h3>
+            <div class="chart-tabs" id="chart-tabs"></div>
+            <div class="chart-container">
+                <canvas id="price-chart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const socket = io();
+        let prices = {};
+        let signals = {};
+        let isTrading = false;
+        let priceHistory = {};
+        let selectedSymbol = null;
+        let priceChart = null;
+        
+        const colors = {
+            'AAPL': '#A3AAAE', 'GOOGL': '#4285F4', 'MSFT': '#00A4EF', 'TSLA': '#E31937', 'AMZN': '#FF9900'
+        };
+        
+        socket.on('connect', () => {
+            document.getElementById('connection-indicator').classList.add('active');
+            document.getElementById('connection-text').textContent = 'Connected';
+        });
+        
+        socket.on('disconnect', () => {
+            document.getElementById('connection-indicator').classList.remove('active');
+            document.getElementById('connection-text').textContent = 'Disconnected';
+        });
+        
+        socket.on('price_update', (data) => {
+            prices = data;
+            updatePriceGrid();
+            updatePriceHistory();
+            updateChart();
+        });
+        
+        socket.on('signal_update', (data) => {
+            signals[data.symbol] = data;
+            updateSignalGrid();
+        });
+        
+        socket.on('status_update', (data) => {
+            updatePnL(data.pnl);
+            updatePositions(data.positions);
+            updateStats(data.stats);
+            updateOrders(data.recent_orders || []);
+        });
+        
+        socket.on('trading_status', (data) => {
+            isTrading = data.running;
+            document.getElementById('trading-indicator').classList.toggle('active', data.running);
+            document.getElementById('trading-text').textContent = data.running ? 'Running' : 'Stopped';
+            document.getElementById('start-btn').disabled = data.running;
+            document.getElementById('stop-btn').disabled = !data.running;
+        });
+        
+        function updatePriceGrid() {
+            const grid = document.getElementById('price-grid');
+            grid.innerHTML = '';
+            
+            for (const [symbol, data] of Object.entries(prices)) {
+                const changeClass = data.change >= 0 ? 'positive' : 'negative';
+                grid.innerHTML += `
+                    <div class="price-card">
+                        <div class="symbol">${symbol}</div>
+                        <div class="price">$${data.price.toFixed(2)}</div>
+                        <div class="change ${changeClass}">${data.change >= 0 ? '+' : ''}${data.change_pct.toFixed(2)}%</div>
+                    </div>
+                `;
+            }
+        }
+        
+        function updateSignalGrid() {
+            const grid = document.getElementById('signal-grid');
+            grid.innerHTML = '';
+            
+            for (const [symbol, data] of Object.entries(signals)) {
+                const signalClass = data.signal.toLowerCase();
+                grid.innerHTML += `
+                    <div class="signal-card">
+                        <div class="symbol">${symbol}</div>
+                        <div class="signal ${signalClass}">${data.signal}</div>
+                        <div class="reason">${data.reason}</div>
+                    </div>
+                `;
+            }
+        }
+        
+        function updatePnL(pnl) {
+            const formatPnL = (val) => {
+                const el = document.getElementById(val === 'total' ? 'total-pnl' : val === 'realized' ? 'realized-pnl' : 'unrealized-pnl');
+                const value = pnl[val];
+                el.textContent = `$${value.toFixed(2)}`;
+                el.className = 'value ' + (value >= 0 ? 'positive' : 'negative');
+            };
+            
+            formatPnL('total');
+            formatPnL('realized');
+            formatPnL('unrealized');
+            document.getElementById('total-orders').textContent = pnl.total_orders || 0;
+        }
+        
+        function updatePositions(positions) {
+            const tbody = document.getElementById('position-body');
+            tbody.innerHTML = '';
+            
+            for (const [symbol, pos] of Object.entries(positions)) {
+                const currentPrice = prices[symbol]?.price || 0;
+                const pnl = pos.quantity > 0 ? (currentPrice - pos.avg_price) * pos.quantity : 0;
+                const pnlClass = pnl >= 0 ? 'positive' : 'negative';
+                
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${symbol}</td>
+                        <td>${pos.quantity}</td>
+                        <td>$${pos.avg_price.toFixed(2)}</td>
+                        <td>$${currentPrice.toFixed(2)}</td>
+                        <td class="${pnlClass}">$${pnl.toFixed(2)}</td>
+                    </tr>
+                `;
+            }
+        }
+        
+        function updateStats(stats) {
+            document.getElementById('buy-orders').textContent = stats.buy_orders || 0;
+            document.getElementById('sell-orders').textContent = stats.sell_orders || 0;
+            document.getElementById('avg-latency').textContent = (stats.avg_latency_ms || 0).toFixed(2) + ' ms';
+        }
+        
+        function updateOrders(orders) {
+            const tbody = document.getElementById('order-body');
+            tbody.innerHTML = '';
+            
+            orders.slice(-20).reverse().forEach(order => {
+                const time = new Date(order.timestamp).toLocaleTimeString();
+                const sideClass = order.side === 'BUY' ? 'positive' : 'negative';
+                
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${time}</td>
+                        <td>${order.order_id.slice(-8)}</td>
+                        <td>${order.symbol}</td>
+                        <td class="${sideClass}">${order.side}</td>
+                        <td>$${order.price.toFixed(2)}</td>
+                        <td>${order.quantity}</td>
+                        <td>${order.latency_ms.toFixed(2)} ms</td>
+                    </tr>
+                `;
+            });
+        }
+        
+        function startTrading() {
+            socket.emit('start_trading');
+        }
+        
+        function stopTrading() {
+            socket.emit('stop_trading');
+        }
+        
+        function initChart() {
+            const ctx = document.getElementById('price-chart').getContext('2d');
+            priceChart = new Chart(ctx, {
+                type: 'line',
+                data: { labels: [], datasets: [] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: true, labels: { color: '#e7e9ea' } } },
+                    scales: {
+                        x: { ticks: { color: '#71767b' }, grid: { color: '#2f3336' } },
+                        y: { ticks: { color: '#71767b' }, grid: { color: '#2f3336' } }
+                    }
+                }
+            });
+        }
+        
+        function updateChartTabs() {
+            const tabs = document.getElementById('chart-tabs');
+            tabs.innerHTML = '';
+            Object.keys(prices).forEach((symbol, idx) => {
+                const btn = document.createElement('button');
+                btn.className = 'chart-tab' + (selectedSymbol === symbol || (!selectedSymbol && idx === 0) ? ' active' : '');
+                btn.textContent = symbol;
+                btn.onclick = () => { selectedSymbol = symbol; updateChartTabs(); updateChart(); };
+                tabs.appendChild(btn);
+            });
+            if (!selectedSymbol) selectedSymbol = Object.keys(prices)[0];
+        }
+        
+        function updatePriceHistory() {
+            if (!selectedSymbol) return;
+            const price = prices[selectedSymbol]?.price;
+            if (price) {
+                if (!priceHistory[selectedSymbol]) priceHistory[selectedSymbol] = [];
+                priceHistory[selectedSymbol].push({ time: new Date(), price: price });
+                if (priceHistory[selectedSymbol].length > 60) priceHistory[selectedSymbol].shift();
+            }
+        }
+        
+        function updateChart() {
+            if (!priceChart) return;
+            updateChartTabs();
+            
+            const history = priceHistory[selectedSymbol] || [];
+            priceChart.data.labels = history.map(h => h.time.toLocaleTimeString());
+            priceChart.data.datasets = [{
+                label: selectedSymbol,
+                data: history.map(h => h.price),
+                borderColor: colors[selectedSymbol] || '#1d9bf0',
+                backgroundColor: (colors[selectedSymbol] || '#1d9bf0') + '20',
+                fill: true,
+                tension: 0.1
+            }];
+            priceChart.update('none');
+        }
+        
+        initChart();
+        
+        setInterval(() => {
+            socket.emit('get_status');
+        }, 3000);
+    </script>
+</body>
+</html>
