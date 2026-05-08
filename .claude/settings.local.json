@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose *)",
+      "Bash(docker exec *)",
+      "Bash(python -c ' *)",
+      "Bash(python web_server.py)",
+      "Bash(curl -s http://127.0.0.1:5000/)",
+      "Bash(pkill -f \"python web_server.py\")"
+    ]
+  }
+}

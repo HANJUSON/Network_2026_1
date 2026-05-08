@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 import sys
+import os
 import time
 import random
 import uuid
 import threading
-import queue
 from pathlib import Path
 from datetime import datetime
 
@@ -19,7 +19,13 @@ from src.client import create_client
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'hft-trading-secret'
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading', logger=False, engineio_logger=False)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading',
+                    logger=False, engineio_logger=False)
+
+DEFAULT_HOST = os.environ.get('SERVER_HOST', '127.0.0.1')
+
+# 히스토그램 버킷 경계 (μs)
+HIST_BOUNDS = [100, 200, 300, 500, 1000]
 
 
 class TradingManager:
@@ -27,121 +33,200 @@ class TradingManager:
         self.running = False
         self.thread = None
         self.client = None
-        self.order_queue = queue.Queue()
-        self.stats = {
-            'total_orders': 0,
-            'successful': 0,
-            'failed': 0,
-        }
-    
-    def start(self, host: str, port: int, protocol: str, orders_per_sec: int):
+        self.protocol = 'tcp'
+        self.condition_label = ''
+
+        self._lock = threading.Lock()
+        self._total = 0
+        self._successful = 0
+        self._timeouts = 0
+        self._latencies_ns = []     # 최대 2000개 rolling window
+
+        self._sec_count = 0
+        self._last_stats_time = 0.0
+        self._last_order_emit_time = 0.0
+
+    def start(self, host, port, protocol, orders_per_sec, condition_label=''):
         if self.running:
             return
-        
+        self.protocol = protocol
+        self.condition_label = condition_label
+        with self._lock:
+            self._total = 0
+            self._successful = 0
+            self._timeouts = 0
+            self._latencies_ns = []
+            self._sec_count = 0
         self.running = True
-        self.stats = {'total_orders': 0, 'successful': 0, 'failed': 0}
-        
+        self._last_stats_time = time.perf_counter()
+        self._last_order_emit_time = 0.0
+
         self.thread = threading.Thread(
-            target=self._run_trading,
+            target=self._run,
             args=(host, port, protocol, orders_per_sec),
-            daemon=True
+            daemon=True,
         )
         self.thread.start()
-        
-        print(f"[SERVER] Trading started: {protocol} to {host}:{port}, {orders_per_sec} orders/sec")
-    
+
     def stop(self):
-        print("[SERVER] Stopping trading...")
         self.running = False
-        
         if self.client:
             try:
                 self.client.disconnect()
-            except:
+            except Exception:
                 pass
             self.client = None
-        
         if self.thread:
             self.thread.join(timeout=2)
-        
-        print("[SERVER] Trading stopped")
-    
-    def _run_trading(self, host: str, port: int, protocol: str, orders_per_sec: int):
+
+    def _build_stats(self, ops):
+        with self._lock:
+            window = list(self._latencies_ns)
+            total = self._total
+            successful = self._successful
+            timeouts = self._timeouts
+
+        hist = [0] * (len(HIST_BOUNDS) + 1)
+
+        if window:
+            sorted_w = sorted(window)
+            n = len(sorted_w)
+
+            def pct(p):
+                return round(sorted_w[min(int(n * p / 100), n - 1)] / 1000, 2)
+
+            for ns in window:
+                us = ns / 1000
+                placed = False
+                for i, b in enumerate(HIST_BOUNDS):
+                    if us < b:
+                        hist[i] += 1
+                        placed = True
+                        break
+                if not placed:
+                    hist[-1] += 1
+
+            return {
+                'protocol': self.protocol.upper(),
+                'conditionLabel': self.condition_label,
+                'totalOrders': total,
+                'successful': successful,
+                'timeouts': timeouts,
+                'lossRate': round(timeouts / max(total, 1) * 100, 2),
+                'opsLastSec': round(ops, 1),
+                'minUs': round(sorted_w[0] / 1000, 2),
+                'maxUs': round(sorted_w[-1] / 1000, 2),
+                'meanUs': round(sum(sorted_w) / n / 1000, 2),
+                'medianUs': pct(50),
+                'p95Us': pct(95),
+                'p99Us': pct(99),
+                'histogram': hist,
+            }
+        else:
+            return {
+                'protocol': self.protocol.upper(),
+                'conditionLabel': self.condition_label,
+                'totalOrders': total,
+                'successful': successful,
+                'timeouts': timeouts,
+                'lossRate': 0.0,
+                'opsLastSec': round(ops, 1),
+                'minUs': 0, 'maxUs': 0, 'meanUs': 0,
+                'medianUs': 0, 'p95Us': 0, 'p99Us': 0,
+                'histogram': hist,
+            }
+
+    def _run(self, host, port, protocol, orders_per_sec):
         interval = 1.0 / orders_per_sec if orders_per_sec > 0 else 0
         symbols = ["BTC-USD", "ETH-USD", "AAPL", "GOOGL", "MSFT"]
-        
+        order_idx = 0
+
         try:
-            self.client = create_client(
-                host, port, protocol,
-                nodelay=True,
-                timeout_ms=1000
-            )
+            self.client = create_client(host, port, protocol,
+                                        nodelay=True, timeout_ms=2000)
             self.client.connect()
-            print(f"[SERVER] Connected to {host}:{port}")
-            
-            order_count = 0
+            socketio.emit('server_connected', {
+                'host': host, 'port': port, 'protocol': protocol.upper(),
+            })
+
+            sec_count = 0
+
             while self.running:
-                start_time = time.perf_counter_ns()
-                
                 order = OrderMessage(
                     timestamp_ns=time.time_ns(),
-                    order_id=f"{datetime.now().strftime('%H%M%S')}_{order_count}_{uuid.uuid4().hex[:6]}",
+                    order_id=f"{order_idx}_{uuid.uuid4().hex[:4]}",
                     symbol=random.choice(symbols),
                     side=random.choice(list(OrderSide)),
                     price=round(random.uniform(10.0, 1000.0), 2),
                     quantity=random.randint(1, 100),
                     order_type=random.choice(list(OrderType)),
                 )
-                
+
                 try:
                     latency_ns = self.client.send_order(order)
-                    latency_us = latency_ns / 1000
-                    
-                    self.stats['total_orders'] += 1
-                    self.stats['successful'] += 1
-                    status = 'FILLED'
-                    
-                except Exception as e:
-                    latency_us = 0
-                    self.stats['total_orders'] += 1
-                    self.stats['failed'] += 1
-                    status = 'REJECTED'
-                    print(f"[SERVER] Order failed: {e}")
-                
-                end_time = time.perf_counter_ns()
-                total_latency_us = (end_time - start_time) / 1000
-                
-                order_data = {
-                    'timestamp': datetime.now().isoformat(),
-                    'orderId': order.order_id,
-                    'symbol': order.symbol,
-                    'side': order.side.value if hasattr(order.side, 'value') else str(order.side),
-                    'price': order.price,
-                    'quantity': order.quantity,
-                    'type': order.order_type.value if hasattr(order.order_type, 'value') else str(order.order_type),
-                    'status': status,
-                    'latency': latency_us,
-                    'totalLatency': total_latency_us,
-                }
-                
-                socketio.emit('order_result', order_data)
-                
-                order_count += 1
-                
+                except Exception:
+                    latency_ns = -1
+
+                now = time.perf_counter()
+
+                with self._lock:
+                    self._total += 1
+                    self._sec_count += 1
+                    sec_count += 1
+                    if latency_ns == -1:
+                        self._timeouts += 1
+                        status = 'LOST'
+                        latency_us = 0.0
+                    else:
+                        self._successful += 1
+                        latency_us = latency_ns / 1000
+                        self._latencies_ns.append(latency_ns)
+                        if len(self._latencies_ns) > 2000:
+                            self._latencies_ns = self._latencies_ns[-2000:]
+                        status = 'FILLED'
+
+                # 개별 주문 이벤트: 최대 20회/초로 제한 (로그 표시용)
+                if now - self._last_order_emit_time >= 0.05:
+                    socketio.emit('order_result', {
+                        'timestamp': datetime.now().isoformat(),
+                        'orderId': order.order_id,
+                        'symbol': order.symbol,
+                        'side': order.side.value,
+                        'price': order.price,
+                        'quantity': order.quantity,
+                        'orderType': order.order_type.value,
+                        'status': status,
+                        'latencyUs': round(latency_us, 2),
+                        'protocol': protocol.upper(),
+                    })
+                    self._last_order_emit_time = now
+
+                # 통계 업데이트: 1초마다
+                elapsed = now - self._last_stats_time
+                if elapsed >= 1.0:
+                    ops = sec_count / elapsed
+                    sec_count = 0
+                    with self._lock:
+                        self._sec_count = 0
+                    self._last_stats_time = now
+                    socketio.emit('stats_update', self._build_stats(ops))
+
+                order_idx += 1
+
                 if interval > 0:
                     time.sleep(interval)
-                    
-        except (ConnectionRefusedError, ConnectionResetError) as e:
-            print(f"[SERVER] Connection failed: {e}")
-            socketio.emit('error', {'message': f'Cannot connect to {host}:{port}'})
+
+        except (ConnectionRefusedError, ConnectionResetError, OSError) as e:
+            socketio.emit('connection_error', {
+                'message': f'{host}:{port} 연결 실패 ({protocol.upper()}): {e}'
+            })
         except Exception as e:
-            print(f"[SERVER] Error: {e}")
-            socketio.emit('error', {'message': str(e)})
+            socketio.emit('connection_error', {'message': str(e)})
         finally:
             if self.client:
                 try:
                     self.client.disconnect()
-                except:
+                except Exception:
                     pass
             self.running = False
             socketio.emit('trading_stopped', {'status': 'stopped'})
@@ -152,28 +237,28 @@ trading_manager = TradingManager()
 
 @app.route('/')
 def index():
-    return render_template('trading.html')
+    return render_template('trading.html', default_host=DEFAULT_HOST)
 
 
 @socketio.on('connect')
 def handle_connect():
-    print('[SERVER] Client connected')
-    emit('connected', {'message': 'Connected to server'})
+    emit('connected', {'status': 'ok'})
 
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    print('[SERVER] Client disconnected')
+    pass
 
 
 @socketio.on('start_trading')
 def handle_start_trading(data):
-    host = data.get('host', '127.0.0.1')
-    port = data.get('port', 8888)
-    protocol = data.get('protocol', 'tcp')
-    orders_per_sec = data.get('ordersPerSec', 100)
-    
-    trading_manager.start(host, port, protocol, orders_per_sec)
+    trading_manager.start(
+        host=data.get('host', '127.0.0.1'),
+        port=int(data.get('port', 8888)),
+        protocol=data.get('protocol', 'tcp'),
+        orders_per_sec=int(data.get('ordersPerSec', 10)),
+        condition_label=data.get('conditionLabel', ''),
+    )
     emit('trading_started', {'status': 'running'})
 
 
@@ -183,19 +268,15 @@ def handle_stop_trading():
     emit('trading_stopped', {'status': 'stopped'})
 
 
-@socketio.on('ping')
-def handle_ping():
-    emit('pong', {'time': datetime.now().isoformat()})
-
-
 def main():
     print("=" * 60)
-    print("HFT Trading Web Server")
+    print("HFT Trading Dashboard")
     print("=" * 60)
-    print("Open your browser and go to: http://127.0.0.1:5000")
+    print(f"Default server host: {DEFAULT_HOST}")
+    print("Open: http://127.0.0.1:5000")
     print("=" * 60)
-    
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False,
+                 allow_unsafe_werkzeug=True)
 
 
 if __name__ == '__main__':

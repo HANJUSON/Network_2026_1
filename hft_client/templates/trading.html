@@ -3,106 +3,137 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HFT Trading Client</title>
+    <title>HFT Trading Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>HFT Trading Client</h1>
-            <div class="connection-status">
-                <span id="connection-indicator" class="indicator"></span>
-                <span id="connection-text">Disconnected</span>
-            </div>
-        </header>
+<div class="container">
 
-        <div class="control-panel">
-            <div class="control-group">
-                <label>Server</label>
-                <input type="text" id="server-host" value="127.0.0.1" placeholder="Host">
-                <input type="number" id="server-port" value="8888" placeholder="Port">
-            </div>
-            <div class="control-group">
-                <label>Protocol</label>
-                <select id="protocol">
-                    <option value="tcp">TCP</option>
-                    <option value="udp">UDP</option>
-                </select>
-            </div>
-            <div class="control-group">
-                <label>Orders</label>
-                <input type="number" id="orders-per-sec" value="100" min="1" max="10000">
-                <span class="unit">orders/sec</span>
-            </div>
-            <div class="button-group">
-                <button id="start-btn" class="btn btn-start">Start Trading</button>
-                <button id="stop-btn" class="btn btn-stop" disabled>Stop Trading</button>
-            </div>
+    <!-- Header -->
+    <header>
+        <div class="header-left">
+            <h1>HFT Trading Dashboard</h1>
+            <span id="protocol-badge" class="protocol-badge proto-tcp">TCP</span>
+            <span id="condition-tag" class="condition-tag hidden"></span>
         </div>
-
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-label">Total Orders</div>
-                <div class="stat-value" id="total-orders">0</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Orders/sec</div>
-                <div class="stat-value" id="orders-per-sec-display">0</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Avg Latency</div>
-                <div class="stat-value" id="avg-latency">0 <span class="unit">μs</span></div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">P99 Latency</div>
-                <div class="stat-value" id="p99-latency">0 <span class="unit">μs</span></div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Success Rate</div>
-                <div class="stat-value" id="success-rate">100<span class="unit">%</span></div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Server Status</div>
-                <div class="stat-value" id="server-status">-</div>
-            </div>
+        <div class="header-right">
+            <span id="conn-indicator" class="indicator"></span>
+            <span id="conn-text">Disconnected</span>
         </div>
+    </header>
 
-        <div class="charts-grid">
-            <div class="chart-container">
-                <h3>Latency Over Time</h3>
-                <canvas id="latency-chart"></canvas>
-            </div>
-            <div class="chart-container">
-                <h3>Orders Per Second</h3>
-                <canvas id="ops-chart"></canvas>
-            </div>
+    <!-- Control Panel -->
+    <div class="control-panel">
+        <div class="control-group">
+            <label>Server Host</label>
+            <input type="text" id="server-host" value="{{ default_host }}" placeholder="IP 주소">
         </div>
-
-        <div class="log-section">
-            <h3>Trade Log</h3>
-            <div class="log-container" id="log-container">
-                <table class="log-table">
-                    <thead>
-                        <tr>
-                            <th>Time</th>
-                            <th>Order ID</th>
-                            <th>Symbol</th>
-                            <th>Side</th>
-                            <th>Price</th>
-                            <th>Qty</th>
-                            <th>Status</th>
-                            <th>Latency</th>
-                        </tr>
-                    </thead>
-                    <tbody id="log-body">
-                    </tbody>
-                </table>
-            </div>
+        <div class="control-group">
+            <label>Port</label>
+            <input type="number" id="server-port" value="8888" style="width:90px">
+        </div>
+        <div class="control-group">
+            <label>Protocol</label>
+            <select id="protocol">
+                <option value="tcp">TCP</option>
+                <option value="udp">UDP</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>Orders / sec</label>
+            <input type="number" id="orders-per-sec" value="10" min="1" max="1000" style="width:80px">
+        </div>
+        <div class="control-group">
+            <label>Network Condition <span class="hint">(tc netem)</span></label>
+            <input type="text" id="condition-label" placeholder="예: loss 1%,  delay 1ms" style="width:210px">
+        </div>
+        <div class="button-group">
+            <button id="start-btn" class="btn btn-start">▶ Start</button>
+            <button id="stop-btn" class="btn btn-stop" disabled>■ Stop</button>
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <!-- Stats Row 1: 핵심 지표 -->
+    <div class="stats-grid four-col">
+        <div class="stat-card" id="card-total">
+            <div class="stat-label">Total Orders</div>
+            <div class="stat-value" id="stat-total">0</div>
+            <div class="stat-sub" id="stat-sub-succ">Success: 0 &nbsp;|&nbsp; Lost: 0</div>
+        </div>
+        <div class="stat-card" id="card-loss">
+            <div class="stat-label">Loss Rate</div>
+            <div class="stat-value" id="stat-loss">0.00 <span class="unit">%</span></div>
+            <div class="stat-sub">패킷 손실 / 타임아웃</div>
+        </div>
+        <div class="stat-card" id="card-ops">
+            <div class="stat-label">Throughput</div>
+            <div class="stat-value" id="stat-ops">0 <span class="unit">ops</span></div>
+            <div class="stat-sub">orders / sec</div>
+        </div>
+        <div class="stat-card" id="card-p99">
+            <div class="stat-label">P99 Latency</div>
+            <div class="stat-value" id="stat-p99">0 <span class="unit">μs</span></div>
+            <div class="stat-sub">99번째 백분위수</div>
+        </div>
+    </div>
+
+    <!-- Stats Row 2: 지연시간 분포 -->
+    <div class="stats-grid four-col">
+        <div class="stat-card">
+            <div class="stat-label">Min</div>
+            <div class="stat-value small" id="stat-min">— <span class="unit">μs</span></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Mean</div>
+            <div class="stat-value small" id="stat-mean">— <span class="unit">μs</span></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Median (P50)</div>
+            <div class="stat-value small" id="stat-median">— <span class="unit">μs</span></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">P95</div>
+            <div class="stat-value small" id="stat-p95">— <span class="unit">μs</span></div>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-grid">
+        <div class="chart-container">
+            <h3>Latency Over Time <span class="hint">— Mean vs P99 (μs)</span></h3>
+            <canvas id="latency-chart"></canvas>
+        </div>
+        <div class="chart-container">
+            <h3>Latency Distribution <span class="hint">— 구간별 주문 수 (μs)</span></h3>
+            <canvas id="hist-chart"></canvas>
+        </div>
+    </div>
+
+    <!-- Trade Log -->
+    <div class="log-section">
+        <h3>Trade Log <span class="hint">— 최근 100건 (샘플링 20회/초)</span></h3>
+        <div class="log-container">
+            <table class="log-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Symbol</th>
+                        <th>Side</th>
+                        <th>Price</th>
+                        <th>Qty</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Latency</th>
+                    </tr>
+                </thead>
+                <tbody id="log-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

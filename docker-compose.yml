@@ -1,0 +1,41 @@
+services:
+  server:
+    build: ./hft_server
+    container_name: hft-server
+    networks:
+      hft_net:
+        ipv4_address: 10.10.0.2
+    cap_add:
+      - NET_ADMIN   # tc netem 실행 권한
+
+  client:
+    build: ./hft_client
+    container_name: hft-client
+    networks:
+      hft_net:
+        ipv4_address: 10.10.0.3
+    depends_on:
+      - server
+    volumes:
+      - ./hft_client/results:/app/results
+
+  web:
+    build: ./hft_client
+    container_name: hft-web
+    command: python web_server.py
+    ports:
+      - "5000:5000"
+    environment:
+      - SERVER_HOST=10.10.0.2
+    networks:
+      hft_net:
+        ipv4_address: 10.10.0.4
+    depends_on:
+      - server
+
+networks:
+  hft_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.10.0.0/24
