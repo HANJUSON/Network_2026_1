@@ -69,14 +69,14 @@ class HFTClientUDP(HFTClientBase):
     def send_order(self, order) -> int:
         from src.utils import get_time_ns
         start_ns = get_time_ns()
-        
+
         self.sock.send(order.serialize())
-        
+
         try:
             response_data = self.sock.recv(1024)
         except socket.timeout:
-            pass
-        
+            return -1
+
         end_ns = get_time_ns()
         return end_ns - start_ns
 

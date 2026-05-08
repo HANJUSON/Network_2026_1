@@ -74,12 +74,14 @@ class OrderResponse:
         status: str,
         executed_price: float = 0.0,
         executed_qty: int = 0,
+        message: str = "",
     ):
         self.timestamp_ns = timestamp_ns
         self.order_id = order_id
         self.status = status
         self.executed_price = executed_price
         self.executed_qty = executed_qty
+        self.message = message
 
     def serialize(self) -> bytes:
         data = (
@@ -87,7 +89,8 @@ class OrderResponse:
             f"{self.order_id}|"
             f"{self.status}|"
             f"{self.executed_price}|"
-            f"{self.executed_qty}"
+            f"{self.executed_qty}|"
+            f"{self.message}"
         )
         return data.encode('utf-8')
 
@@ -100,6 +103,7 @@ class OrderResponse:
             status=parts[2],
             executed_price=float(parts[3]) if parts[3] else 0.0,
             executed_qty=int(parts[4]) if parts[4] else 0,
+            message=parts[5] if len(parts) > 5 else "",
         )
 
     def __repr__(self):

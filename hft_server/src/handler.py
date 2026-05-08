@@ -168,7 +168,7 @@ class OrderHandler:
         
         if remaining:
             self.exchange.add_order(order)
-            status = "PARTIALLY_FILLED" if order.is_fully_filled() else "PENDING"
+            status = "PARTIALLY_FILLED" if exec_qty > 0 else "PENDING"
         else:
             status = "FILLED"
         

@@ -67,18 +67,17 @@ class OrderMatcher:
         
         return trade
     
-    def match_market_order(self, order: Order) -> Tuple[List[Trade], List[Order]]:
+    def match_market_order(self, order: Order) -> Tuple[List[Trade], Optional[Order]]:
         trades: List[Trade] = []
-        remaining_order = None
-        
+
         if order.side == OrderSide.BUY:
             while self.order_book.asks and order.remaining_qty > 0:
                 best_ask = self.order_book.get_best_ask()
                 if not best_ask:
                     break
-                
+
                 trade_qty = min(order.remaining_qty, best_ask.remaining_qty)
-                
+
                 trade = Trade(
                     timestamp_ns=time.time_ns(),
                     buy_order_id=order.order_id,
@@ -88,24 +87,21 @@ class OrderMatcher:
                     quantity=trade_qty,
                 )
                 trades.append(trade)
-                
+
                 best_ask.fill(trade_qty, best_ask.price)
                 order.fill(trade_qty, best_ask.price)
-                
+
                 if best_ask.is_fully_filled():
                     self.order_book.asks.pop(0)
-            
-            if order.remaining_qty > 0:
-                remaining_order = order
-        
+
         elif order.side == OrderSide.SELL:
             while self.order_book.bids and order.remaining_qty > 0:
                 best_bid = self.order_book.get_best_bid()
                 if not best_bid:
                     break
-                
+
                 trade_qty = min(order.remaining_qty, best_bid.remaining_qty)
-                
+
                 trade = Trade(
                     timestamp_ns=time.time_ns(),
                     buy_order_id=best_bid.order_id,
@@ -115,18 +111,16 @@ class OrderMatcher:
                     quantity=trade_qty,
                 )
                 trades.append(trade)
-                
+
                 best_bid.fill(trade_qty, best_bid.price)
                 order.fill(trade_qty, best_bid.price)
-                
+
                 if best_bid.is_fully_filled():
                     self.order_book.bids.pop(0)
-            
-            if order.remaining_qty > 0:
-                remaining_order = order
-        
-        return trades, [remaining_order] if remaining_order else []
-    
+
+        remaining_order = order if order.remaining_qty > 0 else None
+        return trades, remaining_order
+
     def match_limit_order(self, order: Order) -> Tuple[List[Trade], Optional[Order]]:
         trades: List[Trade] = []
         
