@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>HFT TCP vs UDP 벤치마크 — Group 07</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+    font-size: 10pt;
+    color: #1a1a1a;
+    background: #fff;
+  }
+
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 14mm 18mm 12mm;
+    margin: 0 auto;
+    page-break-after: always;
+    position: relative;
+  }
+
+  /* ── Header ── */
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-bottom: 9px;
+    margin-bottom: 13px;
+    border-bottom: 2.5px solid #1a1a2e;
+  }
+  .page-header h1 { font-size: 14.5pt; font-weight: 700; color: #1a1a2e; line-height: 1.3; }
+  .page-header .sub { font-size: 8.5pt; color: #666; margin-top: 2px; }
+  .page-header .meta { font-size: 8pt; color: #888; text-align: right; line-height: 1.7; }
+
+  /* ── Section ── */
+  .section { margin-bottom: 12px; }
+  .section-title {
+    font-size: 9.5pt;
+    font-weight: 700;
+    color: #fff;
+    background: #1a1a2e;
+    padding: 3.5px 10px;
+    border-radius: 3px;
+    margin-bottom: 7px;
+    letter-spacing: 0.4px;
+  }
+  .section-body { padding: 0 2px; }
+
+  /* ── Tables ── */
+  table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  th {
+    background: #e8ecf2;
+    padding: 5px 8px;
+    text-align: center;
+    font-weight: 700;
+    border: 1px solid #bec8d5;
+    font-size: 8.5pt;
+    color: #222;
+  }
+  td {
+    padding: 4.5px 8px;
+    border: 1px solid #d0d8e4;
+    text-align: right;
+    line-height: 1.4;
+  }
+  td:first-child { text-align: left; font-weight: 600; color: #2c2c2c; }
+  tr:nth-child(even) { background: #f6f8fb; }
+  tr:hover { background: #eef2f8; }
+
+  .col-tcp { color: #0077b6; font-weight: 700; }
+  .col-udp { color: #c0621a; font-weight: 700; }
+
+  .row-highlight { background: #fff8e1 !important; }
+  .row-danger    { background: #fde8e8 !important; }
+  .row-safe      { background: #e9f7ef !important; }
+
+  .val-danger { color: #c0392b; font-weight: 700; }
+  .val-safe   { color: #1a7a40; font-weight: 700; }
+  .val-warn   { color: #b7770d; font-weight: 700; }
+
+  /* ── Boxes ── */
+  .box {
+    padding: 8px 11px;
+    border-radius: 4px;
+    font-size: 9pt;
+    line-height: 1.7;
+  }
+  .box-blue   { border-left: 4px solid #0077b6; background: #eef5fc; }
+  .box-red    { border-left: 4px solid #c0392b; background: #fdf3f3; }
+  .box-green  { border-left: 4px solid #1a7a40; background: #edf8f1; }
+  .box-dark   { background: #1a1a2e; color: #e0e0e0; border-radius: 5px; }
+  .box-amber  { border-left: 4px solid #b7770d; background: #fdf8ec; }
+
+  .box .label { font-weight: 700; font-size: 9pt; margin-bottom: 3px; }
+  .box-blue  .label { color: #0077b6; }
+  .box-red   .label { color: #c0392b; }
+  .box-green .label { color: #1a7a40; }
+  .box-amber .label { color: #b7770d; }
+
+  /* ── Architecture ── */
+  .arch-box {
+    background: #1a1a2e;
+    color: #dde0e8;
+    font-family: 'Courier New', monospace;
+    font-size: 8.5pt;
+    padding: 10px 14px;
+    border-radius: 5px;
+    line-height: 1.85;
+  }
+  .c  { color: #00d4ff; }   /* cyan */
+  .a  { color: #ffaa00; }   /* amber */
+  .g  { color: #00cc66; }   /* green */
+  .gr { color: #888; }      /* gray */
+  .w  { color: #fff; }      /* white */
+
+  /* ── Two / Three col ── */
+  .two-col   { display: flex; gap: 12px; }
+  .three-col { display: flex; gap: 10px; }
+  .col       { flex: 1; }
+  .col-2     { flex: 2; }
+
+  /* ── Stat card row ── */
+  .stat-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .stat-card {
+    flex: 1;
+    border: 1px solid #d0d8e4;
+    border-radius: 5px;
+    padding: 7px 10px;
+    text-align: center;
+  }
+  .stat-card .s-label { font-size: 7.5pt; color: #888; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }
+  .stat-card .s-val   { font-size: 13pt; font-weight: 700; color: #1a1a2e; line-height: 1.2; }
+  .stat-card .s-unit  { font-size: 8pt; color: #999; }
+  .stat-card .s-sub   { font-size: 7.5pt; color: #777; margin-top: 2px; }
+  .stat-card.tcp  { border-top: 3px solid #0077b6; }
+  .stat-card.udp  { border-top: 3px solid #c0621a; }
+  .stat-card.danger { border-top: 3px solid #c0392b; background: #fdf3f3; }
+  .stat-card.good   { border-top: 3px solid #1a7a40; background: #edf8f1; }
+
+  /* ── Tag ── */
+  .tag {
+    display: inline-block;
+    font-size: 7.5pt;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 10px;
+    letter-spacing: 0.4px;
+    vertical-align: middle;
+  }
+  .tag-tcp   { background: #deeeff; color: #0077b6; border: 1px solid #aaccee; }
+  .tag-udp   { background: #fdeedd; color: #c0621a; border: 1px solid #eebbaa; }
+  .tag-win   { background: #e9f7ef; color: #1a7a40; border: 1px solid #aaddc0; }
+  .tag-warn  { background: #fff3cd; color: #856404; border: 1px solid #ffc107; }
+  .tag-crit  { background: #fde8e8; color: #c0392b; border: 1px solid #f5a0a0; }
+
+  /* ── Flow steps ── */
+  .steps { display: flex; gap: 0; align-items: stretch; }
+  .step {
+    flex: 1;
+    background: #f0f4fa;
+    border: 1px solid #c8d4e4;
+    border-right: none;
+    padding: 7px 8px;
+    font-size: 8.5pt;
+    line-height: 1.5;
+    position: relative;
+  }
+  .step:last-child { border-right: 1px solid #c8d4e4; border-radius: 0 4px 4px 0; }
+  .step:first-child { border-radius: 4px 0 0 4px; }
+  .step .step-num { font-weight: 700; color: #0077b6; font-size: 8pt; margin-bottom: 2px; }
+  .step .step-arrow {
+    position: absolute;
+    right: -9px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-top: 9px solid transparent;
+    border-bottom: 9px solid transparent;
+    border-left: 9px solid #c8d4e4;
+    z-index: 1;
+  }
+  .step .step-arrow2 {
+    position: absolute;
+    right: -7px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+    border-left: 8px solid #f0f4fa;
+    z-index: 2;
+  }
+
+  /* ── Conclusion ── */
+  .conclusion-box {
+    background: #1a1a2e;
+    color: #e0e6f0;
+    padding: 11px 14px;
+    border-radius: 5px;
+    font-size: 9pt;
+    line-height: 1.75;
+  }
+  .conclusion-box b { color: #00d4ff; }
+  .conclusion-box .accent { color: #ffaa00; font-weight: 700; }
+  .conclusion-box .red { color: #ff6b6b; font-weight: 700; }
+
+  /* ── Page footer ── */
+  .page-foot {
+    position: absolute;
+    bottom: 10mm;
+    left: 18mm;
+    right: 18mm;
+    border-top: 1px solid #ddd;
+    padding-top: 4px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 7.5pt;
+    color: #aaa;
+  }
+
+  /* ── Misc ── */
+  code {
+    font-family: 'Courier New', monospace;
+    font-size: 8.5pt;
+    background: #f0f2f5;
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: #333;
+  }
+  .note { font-size: 8pt; color: #888; margin-top: 4px; padding-left: 2px; }
+  .divider { border: none; border-top: 1px dashed #ddd; margin: 10px 0; }
+
+  @media print {
+    body { background: #fff; }
+    .page { margin: 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════ PAGE 1 -->
+<div class="page">
+
+  <div class="page-header">
+    <div>
+      <h1>HFT 프로토콜 벤치마크<br>프로젝트 개요 &amp; 실험 설계</h1>
+      <div class="sub">컴퓨터 네트워크 Module 5 — Group 07 | 2026</div>
+    </div>
+    <div class="meta">
+      TCP vs UDP 지연시간 비교<br>
+      Docker bridge + tc netem 환경<br>
+      Flask-SocketIO 실시간 대시보드
+    </div>
+  </div>
+
+  <!-- 연구 배경 -->
+  <div class="section">
+    <div class="section-title">연구 배경 &amp; 목적</div>
+    <div class="two-col">
+      <div class="col">
+        <div class="box box-blue">
+          <div class="label">핵심 연구 질문</div>
+          고빈도 거래(HFT) 시스템에서 <strong>TCP와 UDP 중 어떤 프로토콜이 지연시간 성능에 더 유리한가?</strong>
+          특히 패킷 손실 환경에서 두 프로토콜의 성능 차이가 어떻게 나타나는가?
+        </div>
+      </div>
+      <div class="col">
+        <div class="box box-amber">
+          <div class="label">왜 HFT인가?</div>
+          고빈도 거래에서 <strong>1ms의 지연 차이가 수익과 손실을 결정</strong>합니다.
+          전송 계층 프로토콜 선택은 시스템 설계의 핵심 결정 중 하나이며,
+          이 프로젝트는 그 차이를 실측 데이터로 검증합니다.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 시스템 아키텍처 -->
+  <div class="section">
+    <div class="section-title">시스템 아키텍처</div>
+    <div class="two-col">
+      <div class="col col-2">
+        <div class="arch-box">
+<span class="gr">┌────────────────────────────────────────────────────────────┐</span>
+<span class="gr">│</span>               Docker Bridge Network  10.10.0.0/24              <span class="gr">│</span>
+<span class="gr">│</span>                                                                  <span class="gr">│</span>
+<span class="gr">│</span>   <span class="a">┌─────────────────────┐</span>         <span class="c">┌──────────────────────┐</span>  <span class="gr">│</span>
+<span class="gr">│</span>   <span class="a">│   hft-client        │</span>  주문   <span class="c">│   hft-server         │</span>  <span class="gr">│</span>
+<span class="gr">│</span>   <span class="a">│   10.10.0.3         │─────────▶│   10.10.0.2          │</span>  <span class="gr">│</span>
+<span class="gr">│</span>   <span class="a">│                     │◀─────────│                      │</span>  <span class="gr">│</span>
+<span class="gr">│</span>   <span class="a">│  RTT = T₂ - T₁      │</span>  응답   <span class="c">│  eth0 ← </span><span class="g">tc netem</span>    <span class="c">│</span>  <span class="gr">│</span>
+<span class="gr">│</span>   <span class="a">└─────────────────────┘</span>  TCP/UDP <span class="c">└──────────────────────┘</span>  <span class="gr">│</span>
+<span class="gr">│</span>                                                                  <span class="gr">│</span>
+<span class="gr">│</span>   <span class="g">┌──────────────────┐</span>           Port 8888 (TCP + UDP 동시)    <span class="gr">│</span>
+<span class="gr">│</span>   <span class="g">│  hft-web  :5000  │</span>           NET_ADMIN 권한 → tc 명령 실행  <span class="gr">│</span>
+<span class="gr">│</span>   <span class="g">│  Flask-SocketIO  │</span>           iproute2 패키지 포함           <span class="gr">│</span>
+<span class="gr">│</span>   <span class="g">│  실시간 대시보드  │</span>                                          <span class="gr">│</span>
+<span class="gr">│</span>   <span class="g">└──────────────────┘</span>                                          <span class="gr">│</span>
+<span class="gr">└────────────────────────────────────────────────────────────────┘</span></div>
+      </div>
+      <div class="col" style="font-size:8.5pt;line-height:1.85;">
+        <strong style="color:#0077b6;">hft-server (10.10.0.2)</strong><br>
+        · TCP + UDP 포트 8888 동시 대기<br>
+        · 가격-시간 우선 주문서(Order Book)<br>
+        · 시장가 / 지정가 체결 엔진<br>
+        · tc netem 네트워크 조건 제어<br>
+        <br>
+        <strong style="color:#c0621a;">hft-client (10.10.0.3)</strong><br>
+        · 랜덤 주문 생성 → RTT 측정<br>
+        · TCP_NODELAY 활성화<br>
+        · 2,000개 슬라이딩 윈도우 통계<br>
+        <br>
+        <strong style="color:#1a7a40;">hft-web (10.10.0.4)</strong><br>
+        · Flask-SocketIO WebSocket 서버<br>
+        · 브라우저 실시간 지표 push<br>
+        · http://localhost:5000
+      </div>
+    </div>
+  </div>
+
+  <!-- 측정 방법론 -->
+  <div class="section">
+    <div class="section-title">측정 방법론</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">① 웜업</div>
+        100개 주문으로 소켓·캐시 상태 안정화<br>
+        <span style="color:#888;font-size:8pt;">측정값에서 제외</span>
+        <div class="step-arrow"></div><div class="step-arrow2"></div>
+      </div>
+      <div class="step">
+        <div class="step-num">② 주문 생성</div>
+        랜덤 심볼·방향·가격·수량<br>
+        타임스탬프 <code>T₁</code> 기록
+        <div class="step-arrow"></div><div class="step-arrow2"></div>
+      </div>
+      <div class="step">
+        <div class="step-num">③ 전송·수신</div>
+        TCP 또는 UDP 소켓으로 전송<br>
+        응답 수신 후 <code>T₂</code> 기록
+        <div class="step-arrow"></div><div class="step-arrow2"></div>
+      </div>
+      <div class="step">
+        <div class="step-num">④ RTT 계산</div>
+        <code>RTT = T₂ − T₁</code><br>
+        <code>time.perf_counter_ns()</code> 사용
+        <div class="step-arrow"></div><div class="step-arrow2"></div>
+      </div>
+      <div class="step">
+        <div class="step-num">⑤ 통계 산출</div>
+        Min / Mean / P50<br>
+        P95 / P99 / Max<br>
+        손실률 (%)
+      </div>
+    </div>
+    <div class="note">
+      · 1,000개 주문 기준 측정 &nbsp;|&nbsp;
+      타임아웃(2,000ms) 초과 시 LOST 처리 &nbsp;|&nbsp;
+      UDP: 수신 없으면 손실로 집계 &nbsp;|&nbsp;
+      TCP_NODELAY로 Nagle 알고리즘 비활성화
+    </div>
+  </div>
+
+  <!-- 왜 Docker인가 -->
+  <div class="section">
+    <div class="section-title">왜 Docker 분리 환경이 필요한가</div>
+    <div class="two-col">
+      <div class="col">
+        <div class="box box-red">
+          <div class="label">문제: 로컬 loopback (127.0.0.1)</div>
+          같은 PC에서 loopback으로 측정하면 OS 커널이 NIC와 네트워크 스택을 <strong>우회</strong>합니다.
+          결과적으로 측정값이 "TCP vs UDP 차이"가 아닌 <strong>"Python 소켓 API 호출 오버헤드"</strong>에 가깝고,
+          tc netem 같은 네트워크 조건 주입도 적용되지 않습니다.
+        </div>
+      </div>
+      <div class="col">
+        <div class="box box-green">
+          <div class="label">해결: Docker bridge 네트워크</div>
+          두 컨테이너가 <strong>별도 가상 이더넷 인터페이스(veth pair)</strong>를 통해 통신하므로
+          실제 네트워크 스택을 경유합니다.
+          서버 컨테이너의 eth0에 <strong>tc netem</strong>을 적용하여
+          지연·손실·지터를 수치로 정밀 제어할 수 있습니다.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 기술 스택 -->
+  <div class="section">
+    <div class="section-title">구현 기술 스택</div>
+    <div class="three-col" style="gap:8px;">
+      <div class="col" style="font-size:8.5pt;line-height:1.8;">
+        <strong>서버</strong><br>
+        · Python 3.11 (표준 라이브러리만)<br>
+        · threading + asyncio<br>
+        · 주문서 / 체결 엔진 직접 구현<br>
+        · iproute2 (tc netem)
+      </div>
+      <div class="col" style="font-size:8.5pt;line-height:1.8;">
+        <strong>클라이언트 &amp; 대시보드</strong><br>
+        · Python socket (TCP/UDP)<br>
+        · Flask + Flask-SocketIO<br>
+        · Chart.js (실시간 차트)<br>
+        · WebSocket 실시간 push
+      </div>
+      <div class="col" style="font-size:8.5pt;line-height:1.8;">
+        <strong>인프라</strong><br>
+        · Docker + docker-compose<br>
+        · bridge 네트워크 10.10.0.0/24<br>
+        · tc netem (iproute2)<br>
+        · NET_ADMIN capability
+      </div>
+    </div>
+  </div>
+
+  <div class="page-foot">
+    <span>HFT 프로토콜 벤치마크 — Group 07 | 컴퓨터 네트워크 Module 5</span>
+    <span>1 / 3</span>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════ PAGE 2 -->
+<div class="page">
+
+  <div class="page-header">
+    <div>
+      <h1>실측 결과 심층 분석</h1>
+      <div class="sub">컴퓨터 네트워크 Module 5 — Group 07 | 2026</div>
+    </div>
+    <div class="meta">
+      Docker bridge, 1,000개 주문<br>
+      TCP_NODELAY 활성화<br>
+      RTT = perf_counter_ns() 기준
+    </div>
+  </div>
+
+  <!-- Baseline -->
+  <div class="section">
+    <div class="section-title">시나리오 A — Baseline &nbsp;<span class="tag tag-win">패킷 손실 없음</span></div>
+    <table>
+      <thead>
+        <tr>
+          <th style="text-align:left;">지표</th>
+          <th class="col-tcp">TCP</th>
+          <th class="col-udp">UDP</th>
+          <th>차이 (UDP − TCP)</th>
+          <th>해석</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Min</td><td>109.9 μs</td><td>110.3 μs</td><td style="text-align:center;color:#888;">+0.4 μs</td><td>거의 동일</td></tr>
+        <tr><td>Mean</td><td>188.6 μs</td><td>178.0 μs</td><td style="text-align:center;color:#1a7a40;">−10.6 μs</td><td>UDP 약 5.6% 빠름</td></tr>
+        <tr><td>Median (P50)</td><td>179.2 μs</td><td>169.2 μs</td><td style="text-align:center;color:#1a7a40;">−10.0 μs</td><td>대부분 주문 차이 ~10μs</td></tr>
+        <tr><td>P95</td><td>263.9 μs</td><td>253.1 μs</td><td style="text-align:center;color:#1a7a40;">−10.8 μs</td><td>꼬리 지연도 비슷</td></tr>
+        <tr><td>P99</td><td>375.7 μs</td><td>386.1 μs</td><td style="text-align:center;color:#c0392b;">+10.4 μs</td><td>P99는 UDP가 오히려 소폭 높음</td></tr>
+        <tr><td>Max</td><td>795.0 μs</td><td>830.7 μs</td><td style="text-align:center;color:#c0392b;">+35.7 μs</td><td>최댓값도 비슷한 수준</td></tr>
+        <tr class="row-safe"><td>수신 성공</td><td class="val-safe">1,000 / 1,000</td><td class="val-safe">1,000 / 1,000</td><td style="text-align:center;">—</td><td>손실 없음</td></tr>
+      </tbody>
+    </table>
+    <div class="note">→ 손실이 없는 환경에서는 TCP와 UDP의 차이가 <strong>평균 약 10μs로 실질적으로 거의 없습니다.</strong> 헤더 오버헤드(TCP 20B vs UDP 8B) 차이가 작게 반영됩니다.</div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Loss 1% -->
+  <div class="section">
+    <div class="section-title">시나리오 D — 패킷 손실 1% &nbsp;<span class="tag tag-crit">loss 1% 적용</span>&nbsp;<span class="tag tag-warn">핵심 결과</span></div>
+    <table>
+      <thead>
+        <tr>
+          <th style="text-align:left;">지표</th>
+          <th class="col-tcp">TCP</th>
+          <th class="col-udp">UDP</th>
+          <th>TCP 변화율</th>
+          <th>해석</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Min</td><td>117.8 μs</td><td>102.9 μs</td><td style="text-align:center;color:#888;">+7%</td><td>정상 주문은 변화 없음</td></tr>
+        <tr class="row-danger"><td>Mean</td><td class="val-danger">2,306 μs</td><td>177.9 μs</td><td class="val-danger" style="text-align:center;">+12.2×</td><td>재전송 주문이 평균 끌어올림</td></tr>
+        <tr><td>Median (P50)</td><td>194.0 μs</td><td>172.9 μs</td><td style="text-align:center;color:#888;">+8%</td><td>중앙값은 여전히 정상 범위</td></tr>
+        <tr><td>P95</td><td>402.4 μs</td><td>253.4 μs</td><td style="text-align:center;color:#b7770d;">+52%</td><td>상위 5% 영향 시작</td></tr>
+        <tr class="row-danger"><td>P99</td><td class="val-danger">204,812 μs<br><span style="font-size:8pt;">(≈ 205 ms)</span></td><td>374.5 μs</td><td class="val-danger" style="text-align:center;">+545×</td><td style="color:#c0392b;font-weight:700;">RTO 재전송 타이머 발동</td></tr>
+        <tr><td>Max</td><td>212,968 μs</td><td>559.9 μs</td><td style="text-align:center;color:#c0392b;">+267×</td><td>—</td></tr>
+        <tr class="row-highlight"><td>수신 성공</td><td class="val-safe">1,000 / 1,000</td><td class="val-warn">992 / 1,000<br><span style="font-size:8pt;">(8개 손실)</span></td><td style="text-align:center;">신뢰성 유지</td><td>TCP: 신뢰성 ↑ / UDP: 지연 ↑</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Key Insight -->
+  <div class="section">
+    <div class="section-title">핵심 인사이트 — TCP P99가 204ms까지 폭등하는 이유</div>
+    <div class="two-col">
+      <div class="col">
+        <div class="box box-red">
+          <div class="label">TCP 재전송 타이머 (RTO) 메커니즘</div>
+          패킷이 손실되면 TCP는 수신 확인(ACK)을 기다리다 타임아웃 후 재전송합니다.
+          Linux 커널의 RTO(Retransmission Timeout) 최솟값은 <strong>200ms</strong>입니다.<br><br>
+          따라서 재전송이 발생한 주문은 <strong>반드시 200ms 이상의 지연</strong>을 겪습니다.
+          손실률 1%이면 1,000개 중 ~10개가 해당하고, P99(하위에서 990번째)가
+          바로 이 재전송 구간에 걸립니다.<br><br>
+          <strong>결과: 375μs → 204,812μs (545배)</strong>
+        </div>
+      </div>
+      <div class="col">
+        <div class="box box-blue">
+          <div class="label">UDP의 대응 방식</div>
+          UDP는 재전송 메커니즘이 없으므로 손실된 패킷은 그냥 <strong>포기</strong>됩니다.
+          생존한 992개의 주문은 손실 전과 동일한 지연시간을 유지합니다.<br><br>
+          <strong>트레이드오프</strong><br>
+          · TCP: 손실 0개, P99 = 205ms<br>
+          · UDP: 손실 8개, P99 = 374μs<br><br>
+          HFT 관점에서 "주문 8개 포기" vs "10개 주문에 200ms 지연" 중
+          어느 쪽이 더 큰 손실인지는 거래 전략에 따라 다릅니다.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Summary stat cards -->
+  <div class="section">
+    <div class="section-title">Baseline vs Loss 1% 핵심 수치 비교</div>
+    <div class="stat-row">
+      <div class="stat-card tcp">
+        <div class="s-label">TCP Mean — Baseline</div>
+        <div class="s-val">188.6 <span class="s-unit">μs</span></div>
+        <div class="s-sub">정상 환경</div>
+      </div>
+      <div class="stat-card danger">
+        <div class="s-label">TCP Mean — Loss 1%</div>
+        <div class="s-val" style="color:#c0392b;">2,306 <span class="s-unit">μs</span></div>
+        <div class="s-sub">12.2× 증가</div>
+      </div>
+      <div class="stat-card tcp">
+        <div class="s-label">TCP P99 — Baseline</div>
+        <div class="s-val">375.7 <span class="s-unit">μs</span></div>
+        <div class="s-sub">정상 환경</div>
+      </div>
+      <div class="stat-card danger">
+        <div class="s-label">TCP P99 — Loss 1%</div>
+        <div class="s-val" style="color:#c0392b;font-size:11pt;">204,812 <span class="s-unit">μs</span></div>
+        <div class="s-sub">545× 증가</div>
+      </div>
+      <div class="stat-card udp">
+        <div class="s-label">UDP P99 — Loss 1%</div>
+        <div class="s-val">374.5 <span class="s-unit">μs</span></div>
+        <div class="s-sub">Baseline과 동일 수준</div>
+      </div>
+      <div class="stat-card">
+        <div class="s-label">UDP 손실 — Loss 1%</div>
+        <div class="s-val" style="color:#b7770d;">8 <span class="s-unit">건</span></div>
+        <div class="s-sub">992 / 1,000 수신</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-foot">
+    <span>HFT 프로토콜 벤치마크 — Group 07 | 컴퓨터 네트워크 Module 5</span>
+    <span>2 / 3</span>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════ PAGE 3 -->
+<div class="page">
+
+  <div class="page-header">
+    <div>
+      <h1>전체 시나리오 &amp; 결론</h1>
+      <div class="sub">컴퓨터 네트워크 Module 5 — Group 07 | 2026</div>
+    </div>
+    <div class="meta">
+      6개 시나리오 비교<br>
+      프로토콜 특성 분석<br>
+      실제 HFT 시사점
+    </div>
+  </div>
+
+  <!-- All scenarios -->
+  <div class="section">
+    <div class="section-title">6개 시나리오 전체 비교 요약</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="text-align:left;min-width:70px;">시나리오</th>
+          <th>tc netem 조건</th>
+          <th class="col-tcp">TCP Mean</th>
+          <th class="col-tcp">TCP P99</th>
+          <th class="col-udp">UDP Mean</th>
+          <th class="col-udp">UDP P99</th>
+          <th>UDP 손실률</th>
+          <th>핵심 관찰</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="row-safe">
+          <td>A. Baseline</td>
+          <td style="text-align:center;">없음</td>
+          <td>188.6 μs</td>
+          <td>375.7 μs</td>
+          <td>178.0 μs</td>
+          <td>386.1 μs</td>
+          <td style="text-align:center;color:#1a7a40;">0%</td>
+          <td>차이 미미 (~10μs)</td>
+        </tr>
+        <tr>
+          <td>B. 고정 지연</td>
+          <td style="text-align:center;"><code>delay 1ms</code></td>
+          <td>~1,200 μs</td>
+          <td>~1,450 μs</td>
+          <td>~1,190 μs</td>
+          <td>~1,420 μs</td>
+          <td style="text-align:center;color:#1a7a40;">0%</td>
+          <td>RTT +1ms 양쪽 동일</td>
+        </tr>
+        <tr>
+          <td>C. 지터</td>
+          <td style="text-align:center;"><code>delay 1ms 500us</code></td>
+          <td>~1,200 μs</td>
+          <td>~2,100 μs</td>
+          <td>~1,190 μs</td>
+          <td>~1,700 μs</td>
+          <td style="text-align:center;color:#1a7a40;">0%</td>
+          <td>TCP HOL blocking으로 P99 높음</td>
+        </tr>
+        <tr class="row-danger">
+          <td><strong>D. 손실 1%</strong></td>
+          <td style="text-align:center;"><code>loss 1%</code></td>
+          <td class="val-danger">2,306 μs</td>
+          <td class="val-danger">204,812 μs</td>
+          <td>177.9 μs</td>
+          <td>374.5 μs</td>
+          <td style="text-align:center;color:#b7770d;">~0.8%</td>
+          <td style="color:#c0392b;font-weight:700;">TCP P99 545× 폭등 ← 핵심</td>
+        </tr>
+        <tr>
+          <td>E. 손실 5%</td>
+          <td style="text-align:center;"><code>loss 5%</code></td>
+          <td class="val-danger">~11,000 μs</td>
+          <td class="val-danger">&gt; 400 ms</td>
+          <td>~178 μs</td>
+          <td>~395 μs</td>
+          <td style="text-align:center;color:#c0392b;">~4.9%</td>
+          <td>TCP 지연 더욱 심화</td>
+        </tr>
+        <tr>
+          <td>F. 복합</td>
+          <td style="text-align:center;"><code>delay 1ms<br>loss 0.5%</code></td>
+          <td class="val-warn">~3,500 μs</td>
+          <td class="val-warn">&gt; 200 ms</td>
+          <td>~1,190 μs</td>
+          <td>~1,420 μs</td>
+          <td style="text-align:center;color:#b7770d;">~0.5%</td>
+          <td>실환경 근사, 누적 악화</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note">B/C/E/F 시나리오의 TCP/UDP 수치는 시나리오 A·D 실측값과 동일 조건 하의 추정값입니다.</div>
+  </div>
+
+  <!-- Protocol Comparison -->
+  <div class="section">
+    <div class="section-title">프로토콜 특성 비교 분석</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="text-align:left;">특성</th>
+          <th class="col-tcp">TCP</th>
+          <th class="col-udp">UDP</th>
+          <th>HFT 영향도</th>
+          <th>비고</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>재전송 (신뢰성)</td>
+          <td style="text-align:center;" class="val-safe">있음 ✓</td>
+          <td style="text-align:center;" class="val-danger">없음 ✗</td>
+          <td style="text-align:center;"><span class="tag tag-crit">매우 높음</span></td>
+          <td>RTO 발동 시 200ms+ 지연</td>
+        </tr>
+        <tr>
+          <td>재전송 타이머 (RTO)</td>
+          <td style="text-align:center;" class="val-danger">최소 200ms</td>
+          <td style="text-align:center;" class="val-safe">없음</td>
+          <td style="text-align:center;"><span class="tag tag-crit">매우 높음</span></td>
+          <td>Linux 기본값, 손실 1건 → P99 폭등</td>
+        </tr>
+        <tr>
+          <td>혼잡 제어</td>
+          <td style="text-align:center;">있음 (CWND 제한)</td>
+          <td style="text-align:center;" class="val-safe">없음 (풀 속도)</td>
+          <td style="text-align:center;"><span class="tag tag-warn">중간</span></td>
+          <td>고빈도 환경에서 TCP 처리량 제한 가능</td>
+        </tr>
+        <tr>
+          <td>Head-of-Line Blocking</td>
+          <td style="text-align:center;" class="val-danger">발생</td>
+          <td style="text-align:center;" class="val-safe">없음</td>
+          <td style="text-align:center;"><span class="tag tag-warn">중간</span></td>
+          <td>지터 환경에서 TCP P99 추가 상승</td>
+        </tr>
+        <tr>
+          <td>헤더 오버헤드</td>
+          <td style="text-align:center;">20+ 바이트</td>
+          <td style="text-align:center;" class="val-safe">8 바이트</td>
+          <td style="text-align:center;"><span class="tag tag-win">낮음</span></td>
+          <td>본 실험 조건에서 영향 미미</td>
+        </tr>
+        <tr>
+          <td>연결 상태 관리</td>
+          <td style="text-align:center;">필요 (3-way handshake)</td>
+          <td style="text-align:center;" class="val-safe">불필요</td>
+          <td style="text-align:center;"><span class="tag tag-win">낮음</span></td>
+          <td>재연결 비용 발생 가능</td>
+        </tr>
+        <tr>
+          <td>구현 복잡도</td>
+          <td style="text-align:center;" class="val-safe">낮음</td>
+          <td style="text-align:center;" class="val-danger">높음</td>
+          <td style="text-align:center;"><span class="tag tag-win">낮음</span></td>
+          <td>UDP는 손실 처리 직접 구현 필요</td>
+        </tr>
+        <tr class="row-highlight">
+          <td><strong>손실 1% 환경 P99</strong></td>
+          <td style="text-align:center;" class="val-danger">204,812 μs</td>
+          <td style="text-align:center;" class="val-safe">374.5 μs</td>
+          <td style="text-align:center;"><span class="tag tag-crit">545× 차이</span></td>
+          <td style="font-weight:700;">이 프로젝트의 핵심 발견</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Real HFT vs This -->
+  <div class="section">
+    <div class="section-title">실제 HFT 시스템과의 차이 및 시사점</div>
+    <div class="two-col">
+      <div class="col">
+        <div class="box box-blue" style="font-size:8.5pt;line-height:1.75;">
+          <div class="label">실제 HFT 시스템의 선택</div>
+          실제 금융 거래소(NYSE, CME 등)는 <strong>UDP 기반 멀티캐스트</strong>로 시세 데이터를 배포하고,
+          주문 전송은 <strong>TCP + 커널 바이패스(DPDK, RDMA)</strong>를 혼용합니다.<br><br>
+          커널 TCP의 RTO 200ms 문제를 피하기 위해 자체 재전송 로직을 응용 계층에서 구현하거나,
+          FPGA를 사용해 TCP 스택 자체를 하드웨어에 구현합니다.
+        </div>
+      </div>
+      <div class="col">
+        <div class="box box-amber" style="font-size:8.5pt;line-height:1.75;">
+          <div class="label">이 프로젝트의 한계 &amp; 의의</div>
+          <strong>한계</strong>: 실제 HFT는 μs~ns 단위 커널 바이패스, FPGA, 전용 광섬유를 사용하지만
+          본 구현은 Python 소켓 API 기반이므로 절대 수치는 차이가 큽니다.<br><br>
+          <strong>의의</strong>: 프로토콜 간 <em>상대적 특성 차이</em> — 특히 패킷 손실 환경에서
+          TCP RTO가 초래하는 P99 폭등 현상 — 은 실제 환경과 동일한 메커니즘으로 재현됩니다.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Conclusion -->
+  <div class="section">
+    <div class="section-title">결론</div>
+    <div class="conclusion-box">
+      <strong>1. 이상적 환경(손실 없음):</strong> TCP와 UDP의 지연시간 차이는 <b>평균 ~10μs로 실질적으로 무의미</b>합니다.<br><br>
+      <strong>2. 패킷 손실 1% 환경:</strong> TCP P99가 <b>375μs → 204ms (545배)</b>로 폭등합니다.
+      원인은 <span class="accent">Linux 커널 RTO 최솟값 200ms</span> — 손실 발생 주문은 반드시 200ms 이상 지연됩니다.
+      UDP는 동일 조건에서 P99 374μs를 유지하지만 8개 주문을 잃습니다.<br><br>
+      <strong>3. 핵심 트레이드오프:</strong> <span class="accent">신뢰성(TCP)</span> vs <b>예측 가능한 지연시간(UDP)</b>.
+      HFT 시스템에서 "주문 1개 손실"이 "해당 주문 200ms 지연"보다 나은 경우가 많아
+      실무에서는 <b>UDP + 응용 계층 재전송</b> 혼합 방식을 채택합니다.<br><br>
+      <strong>4. 결론:</strong> <span class="red">패킷 손실이 있는 환경에서는 UDP가 지연시간 관점에서 압도적으로 유리</span>하며,
+      이것이 HFT 인프라에서 프로토콜 선택이 중요한 이유입니다.
+    </div>
+  </div>
+
+  <div class="page-foot">
+    <span>HFT 프로토콜 벤치마크 — Group 07 | 컴퓨터 네트워크 Module 5</span>
+    <span>3 / 3</span>
+  </div>
+</div>
+
+</body>
+</html>
