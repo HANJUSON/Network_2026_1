@@ -84,19 +84,20 @@ class OrderResponse:
         self.message = message
 
     def serialize(self) -> bytes:
+        safe_msg = self.message.replace('|', '/')
         data = (
             f"{self.timestamp_ns}|"
             f"{self.order_id}|"
             f"{self.status}|"
             f"{self.executed_price}|"
             f"{self.executed_qty}|"
-            f"{self.message}"
+            f"{safe_msg}"
         )
         return data.encode('utf-8')
 
     @classmethod
     def deserialize(cls, data: bytes) -> "OrderResponse":
-        parts = data.decode('utf-8').split('|')
+        parts = data.decode('utf-8').split('|', 5)
         return cls(
             timestamp_ns=int(parts[0]),
             order_id=parts[1],

@@ -1,0 +1,33 @@
+[
+  {
+    "timestamp": "2026-05-14T09:53:57.201023",
+    "protocol": "udp",
+    "num_orders": 10000,
+    "interval_us": 100,
+    "stats": {
+      "count": 8928,
+      "min_ns": 40600,
+      "max_ns": 857700,
+      "mean_ns": 93110.49507168459,
+      "median_ns": 80200.0,
+      "std_ns": 37706.68008663445,
+      "p50_ns": 80200,
+      "p75_ns": 108400,
+      "p90_ns": 145100,
+      "p95_ns": 166000,
+      "p99_ns": 204600,
+      "p999_ns": 289300
+    },
+    "metadata": {
+      "host": "127.0.0.1",
+      "port": 8888,
+      "symbols": [
+        "BTC-USD",
+        "ETH-USD",
+        "AAPL",
+        "GOOGL",
+        "MSFT"
+      ]
+    }
+  }
+]

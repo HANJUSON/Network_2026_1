@@ -69,13 +69,15 @@ class TradingManager:
         self.thread.start()
 
     def stop(self):
-        self.running = False
-        if self.client:
+        with self._lock:
+            self.running = False
+            client = self.client
+            self.client = None
+        if client:
             try:
-                self.client.disconnect()
+                client.disconnect()
             except Exception:
                 pass
-            self.client = None
         if self.thread:
             self.thread.join(timeout=2)
 
@@ -142,9 +144,18 @@ class TradingManager:
         order_idx = 0
 
         try:
-            self.client = create_client(host, port, protocol,
-                                        nodelay=True, timeout_ms=2000)
-            self.client.connect()
+            client = create_client(host, port, protocol,
+                                   nodelay=True, timeout_ms=2000)
+            client.connect()
+            # 연결 사이에 stop()이 호출됐으면 즉시 정리
+            with self._lock:
+                if not self.running:
+                    try:
+                        client.disconnect()
+                    except Exception:
+                        pass
+                    return
+                self.client = client
             socketio.emit('server_connected', {
                 'host': host, 'port': port, 'protocol': protocol.upper(),
             })
@@ -223,12 +234,15 @@ class TradingManager:
         except Exception as e:
             socketio.emit('connection_error', {'message': str(e)})
         finally:
-            if self.client:
+            with self._lock:
+                cli = self.client
+                self.client = None
+                self.running = False
+            if cli:
                 try:
-                    self.client.disconnect()
+                    cli.disconnect()
                 except Exception:
                     pass
-            self.running = False
             socketio.emit('trading_stopped', {'status': 'stopped'})
 
 

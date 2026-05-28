@@ -77,12 +77,14 @@ def main():
         results = {'single': benchmark.run()}
     
     save_results = benchmark_config.get("save_results", True)
-    if save_results:
+    if save_results and benchmark.logger.results:
         results_dir = Path(__file__).parent / benchmark_config.get("results_dir", "results")
         results_dir.mkdir(exist_ok=True)
         benchmark.logger.results_dir = str(results_dir)
         filepath = benchmark.logger.save()
         print(f"\nResults saved to: {filepath}")
+    elif save_results:
+        print("\nNo results to save (all benchmarks failed).")
 
 
 if __name__ == "__main__":

@@ -6,7 +6,11 @@
       "Bash(python -c ' *)",
       "Bash(python web_server.py)",
       "Bash(curl -s http://127.0.0.1:5000/)",
-      "Bash(pkill -f \"python web_server.py\")"
+      "Bash(pkill -f \"python web_server.py\")",
+      "WebSearch",
+      "WebFetch(domain:b2broker.com)",
+      "WebFetch(domain:www.coudo.ai)",
+      "WebFetch(domain:www.quantvps.com)"
     ]
   }
 }

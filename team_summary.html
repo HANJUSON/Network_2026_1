@@ -787,5 +787,163 @@
   </div>
 </div>
 
+
+<!-- ═══════════════════════════════════════════════════════════════ PAGE 4 -->
+<div class="page">
+
+  <div class="page-header">
+    <div>
+      <h1>지연 유형별 영향 분석</h1>
+      <div class="sub">컴퓨터 네트워크 Module 5 — Group 07 | 2026</div>
+    </div>
+    <div class="meta">
+      처리·큐잉·전송·전파 지연<br>
+      loopback 환경 기준 분석<br>
+      RTT 지배 요인 규명
+    </div>
+  </div>
+
+  <!-- 4가지 지연 개요 -->
+  <div class="section">
+    <div class="section-title">4가지 네트워크 지연과 이 시뮬레이션에서의 크기</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="text-align:left;">지연 유형</th>
+          <th>정의</th>
+          <th>이 시뮬레이션 조건</th>
+          <th>추정 크기</th>
+          <th>영향도</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="row-safe">
+          <td><strong>전파지연</strong><br><span style="font-weight:400;font-size:8pt;">Propagation Delay</span></td>
+          <td>신호가 매체를 물리적으로 이동하는 시간<br><code>d / v</code> (거리 / 전파속도)</td>
+          <td>loopback(127.0.0.1)<br>물리 매체 없음, 커널 내 처리</td>
+          <td style="text-align:center;" class="val-safe">≈ 0</td>
+          <td style="text-align:center;"><span class="tag tag-win">무시 가능</span></td>
+        </tr>
+        <tr>
+          <td><strong>전송지연</strong><br><span style="font-weight:400;font-size:8pt;">Transmission Delay</span></td>
+          <td>패킷 전체를 링크에 올리는 시간<br><code>L / R</code> (패킷 크기 / 대역폭)</td>
+          <td>주문 메시지 ~100 bytes<br>loopback 대역폭 ≫ 1 Gbps</td>
+          <td style="text-align:center;" class="val-safe">&lt; 1 μs</td>
+          <td style="text-align:center;"><span class="tag tag-win">무시 가능</span></td>
+        </tr>
+        <tr>
+          <td><strong>큐잉지연</strong><br><span style="font-weight:400;font-size:8pt;">Queuing Delay</span></td>
+          <td>라우터·소켓 버퍼에서 대기하는 시간<br>트래픽 부하에 따라 가변</td>
+          <td>동기 1-요청씩 전송<br>응답 후 다음 요청 → 버퍼 적체 없음</td>
+          <td style="text-align:center;" class="val-safe">최소</td>
+          <td style="text-align:center;"><span class="tag tag-win">낮음</span></td>
+        </tr>
+        <tr class="row-danger">
+          <td><strong>처리지연</strong><br><span style="font-weight:400;font-size:8pt;">Processing Delay</span></td>
+          <td>노드(서버)가 패킷을 검사·처리하는 시간<br>파싱, 연산, OS 스택 포함</td>
+          <td>Python 파싱·검증·오더북 매칭<br>커널 소켓 버퍼 복사, 컨텍스트 스위칭</td>
+          <td style="text-align:center;" class="val-danger">100 ~ 400 μs</td>
+          <td style="text-align:center;"><span class="tag tag-crit">지배적</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note">
+      전송지연 계산 예시: 100 bytes × 8 bits / 10 Gbps = 80 ns — RTT 188μs의 0.04% 수준으로 무시 가능
+    </div>
+  </div>
+
+  <!-- 처리지연 상세 -->
+  <div class="section">
+    <div class="section-title">처리지연이 지배적인 이유 — 서버 처리 파이프라인</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">① recv()</div>
+        OS 커널이 소켓 버퍼에서<br>유저 공간으로 데이터 복사<br>
+        <span style="color:#888;font-size:8pt;">커널↔유저 모드 전환</span>
+        <div class="step-arrow"></div><div class="step-arrow2"></div>
+      </div>
+      <div class="step">
+        <div class="step-num">② parse_order()</div>
+        <code>split('|')</code>, <code>int()</code><br><code>float()</code>, <code>Enum()</code> 변환<br>
+        <span style="color:#888;font-size:8pt;">Python 인터프리터 비용</span>
+        <div class="step-arrow"></div><div class="step-arrow2"></div>
+      </div>
+      <div class="step">
+        <div class="step-num">③ validate()</div>
+        심볼·가격·수량 검증<br>조건 분기 처리
+        <div class="step-arrow"></div><div class="step-arrow2"></div>
+      </div>
+      <div class="step">
+        <div class="step-num">④ match()</div>
+        오더북 리스트 탐색<br><code>sort()</code> 호출<br>
+        <span style="color:#888;font-size:8pt;">O(n log n)</span>
+        <div class="step-arrow"></div><div class="step-arrow2"></div>
+      </div>
+      <div class="step">
+        <div class="step-num">⑤ sendall()</div>
+        응답 직렬화 후<br>커널 소켓 버퍼에 전달<br>
+        <span style="color:#888;font-size:8pt;">커널↔유저 모드 전환</span>
+      </div>
+    </div>
+    <div class="note">
+      handler.py의 <code>processing_time = end_time - recv_time</code>이 ②~④ 구간을 측정하며, RTT 측정값의 대부분을 차지합니다.
+    </div>
+  </div>
+
+  <!-- 4가지 지연과 TCP vs UDP -->
+  <div class="section">
+    <div class="section-title">처리지연 관점에서 TCP vs UDP 차이 설명</div>
+    <div class="two-col">
+      <div class="col">
+        <div class="box box-blue">
+          <div class="label">TCP의 추가 처리지연 요소</div>
+          <ul style="padding-left:16px;line-height:1.9;font-size:8.5pt;">
+            <li><strong>ACK 처리</strong>: 커널이 수신 확인 패킷 생성·전송</li>
+            <li><strong>순서 보장</strong>: 시퀀스 번호 검사 및 재조립</li>
+            <li><strong>흐름 제어</strong>: 수신 윈도우 크기 추적</li>
+            <li><strong>Nagle 알고리즘</strong>: <code>TCP_NODELAY</code>로 비활성화하지 않으면 소형 패킷 버퍼링 발생</li>
+            <li><strong>RTO 타이머</strong>: 손실 감지 시 200ms 대기 후 재전송</li>
+          </ul>
+        </div>
+      </div>
+      <div class="col">
+        <div class="box box-amber">
+          <div class="label">UDP의 처리 경량화</div>
+          <ul style="padding-left:16px;line-height:1.9;font-size:8.5pt;">
+            <li><strong>헤더 8바이트</strong>: 체크섬만 검증하고 즉시 전달</li>
+            <li><strong>상태 없음</strong>: 연결 유지 비용 zero</li>
+            <li><strong>재전송 없음</strong>: 손실된 패킷은 포기 → 대기 없음</li>
+            <li><strong>커널 경로 단순</strong>: ACK, 순서 보장 로직 생략</li>
+          </ul>
+          <br>
+          <span style="font-size:8.5pt;">결과: 정상 환경에서 <strong>평균 ~10μs</strong> 빠름(Baseline 실측)<br>
+          손실 환경에서 <strong>P99 차이 545배</strong>(재전송 타이머)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 결론 요약 -->
+  <div class="section">
+    <div class="section-title">지연 분석 종합 결론</div>
+    <div class="conclusion-box">
+      <strong>이 시뮬레이션에서 RTT를 지배하는 것은 <b>처리지연(Processing Delay)</b>입니다.</strong><br><br>
+
+      · <span class="accent">전파지연</span>: loopback 인터페이스는 물리 매체를 경유하지 않으므로 사실상 <b>0</b>입니다.<br>
+      · <span class="accent">전송지연</span>: 주문 메시지 ~100 bytes, 10 Gbps급 loopback에서 <b>&lt; 1 μs</b> — 무시 가능합니다.<br>
+      · <span class="accent">큐잉지연</span>: 요청-응답 동기 구조로 소켓 버퍼에 주문이 쌓이지 않아 <b>최소화</b>됩니다.<br>
+      · <span class="accent">처리지연</span>: Python 파싱·검증·오더북 매칭 + OS 소켓 스택(커널↔유저 전환)이 <b>100~400 μs</b>를 소비하며 RTT의 대부분을 차지합니다.<br><br>
+
+      <strong>TCP vs UDP 차이</strong>도 처리지연 관점으로 설명됩니다: 정상 환경에서는 TCP의 ACK·순서 보장 처리 비용으로 <b>~10μs</b> 더 느리고,
+      패킷 손실 환경에서는 TCP의 <span class="red">RTO 재전송 타이머(최소 200ms)</span>가 일부 주문에 발동되어 P99가 545배 폭등합니다.
+    </div>
+  </div>
+
+  <div class="page-foot">
+    <span>HFT 프로토콜 벤치마크 — Group 07 | 컴퓨터 네트워크 Module 5</span>
+    <span>4 / 4</span>
+  </div>
+</div>
+
 </body>
 </html>

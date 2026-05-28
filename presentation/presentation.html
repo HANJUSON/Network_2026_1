@@ -1,0 +1,2012 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CN_Module5_Group7</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    background: #05070d;
+    font-family: 'Inter', -apple-system, sans-serif;
+    color: #e8edf5;
+    overflow: hidden;
+  }
+
+  /* ===== Deck container — fixed 16:9 ===== */
+  .deck {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(100vw, calc(100vh * 16 / 9));
+    height: min(100vh, calc(100vw * 9 / 16));
+    background: #05070d;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 4.5% 6%;
+    display: none;
+    flex-direction: column;
+    background: radial-gradient(ellipse at top right, #0e1424 0%, #05070d 60%);
+    overflow: hidden;
+  }
+  .slide.active { display: flex; }
+
+  /* ===== Slide header tag ===== */
+  .section-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.8vw;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #00d4ff;
+    margin-bottom: 1.2vw;
+  }
+  .section-tag::before {
+    content: '';
+    width: 28px; height: 2px;
+    background: #00d4ff;
+  }
+  .section-tag.warn { color: #ff4757; }
+  .section-tag.warn::before { background: #ff4757; }
+  .section-tag.safe { color: #00ff88; }
+  .section-tag.safe::before { background: #00ff88; }
+  .section-tag.amber { color: #ffaa00; }
+  .section-tag.amber::before { background: #ffaa00; }
+
+  /* ===== Presenter badge ===== */
+  .presenter-badge {
+    position: absolute;
+    top: 4.5%;
+    right: 6%;
+    font-size: 0.8vw;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #00d4ff;
+    background: rgba(0, 212, 255, 0.08);
+    border: 1px solid rgba(0, 212, 255, 0.35);
+    border-radius: 50px;
+    padding: 0.35vw 1vw;
+    z-index: 5;
+  }
+  .presenter-badge.team {
+    color: #8a96ad;
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  /* ===== Headings ===== */
+  h1.title {
+    font-size: 3.2vw;
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.8vw;
+    color: #ffffff;
+  }
+  h3.slide-title {
+    font-size: 2.2vw;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+    color: #ffffff;
+    margin-bottom: 1.4vw;
+  }
+  h3.slide-title .accent { color: #00d4ff; }
+  h3.slide-title .warn   { color: #ff4757; }
+  h3.slide-title .safe   { color: #00ff88; }
+  h3.slide-title .amber  { color: #ffaa00; }
+
+  p, li {
+    font-size: 1.15vw;
+    line-height: 1.55;
+    color: #d8dee9;
+  }
+
+  ul { list-style: none; }
+  ul li {
+    position: relative;
+    padding-left: 1.5vw;
+    margin-bottom: 0.55vw;
+  }
+  ul li::before {
+    content: '▸';
+    position: absolute;
+    left: 0;
+    color: #00d4ff;
+    font-weight: 700;
+  }
+
+  code, .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* ===== Footer ===== */
+  .footer {
+    position: absolute;
+    bottom: 2.2%;
+    left: 6%; right: 6%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75vw;
+    color: #5a6577;
+    letter-spacing: 0.05em;
+  }
+  .footer .brand { color: #8a96ad; font-weight: 500; }
+  .page-num { font-family: 'JetBrains Mono', monospace; }
+
+  /* ===== Title slide ===== */
+  .title-slide {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    background:
+      radial-gradient(ellipse at center, #0e1424 0%, #05070d 70%),
+      #05070d;
+  }
+  .title-slide .eyebrow {
+    font-size: 0.9vw;
+    letter-spacing: 0.35em;
+    color: #00d4ff;
+    font-weight: 600;
+    margin-bottom: 1.8vw;
+    text-transform: uppercase;
+  }
+  .title-slide .mega {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 4.6vw;
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: #ffffff;
+    margin-bottom: 1vw;
+    padding: 0.4vw 1.6vw;
+    border-left: 5px solid #00d4ff;
+    border-right: 5px solid #00d4ff;
+  }
+  .title-slide .topic-line {
+    font-size: 1.4vw;
+    color: #d8dee9;
+    margin-bottom: 1.5vw;
+    letter-spacing: 0.02em;
+  }
+  .title-slide .topic-line strong {
+    color: #00d4ff;
+    font-weight: 700;
+  }
+  .title-slide .sub {
+    font-size: 1.15vw;
+    color: #8a96ad;
+    font-weight: 300;
+    margin-bottom: 2.5vw;
+    max-width: 65%;
+    line-height: 1.5;
+  }
+  .title-slide .members-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1vw;
+    width: 75%;
+    margin-bottom: 2.5vw;
+  }
+  .title-slide .member {
+    background: rgba(0, 212, 255, 0.06);
+    border: 1px solid rgba(0, 212, 255, 0.25);
+    border-radius: 8px;
+    padding: 0.8vw 1vw;
+    text-align: center;
+  }
+  .title-slide .m-name {
+    font-size: 1.05vw;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 0.2vw;
+  }
+  .title-slide .m-role {
+    font-size: 0.8vw;
+    color: #00d4ff;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .title-slide .meta {
+    display: flex;
+    gap: 2vw;
+    font-size: 0.95vw;
+    color: #5a6577;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .title-slide .meta span { color: #8a96ad; }
+
+  /* ===== Agenda slide ===== */
+  .agenda-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.2vw;
+    flex: 1;
+    margin-top: 1vw;
+  }
+  .agenda-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 1.4vw;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+  .agenda-card .num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85vw;
+    color: #00d4ff;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    margin-bottom: 0.6vw;
+  }
+  .agenda-card h4 {
+    font-size: 1.15vw;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 0.6vw;
+    line-height: 1.25;
+  }
+  .agenda-card p {
+    font-size: 0.9vw;
+    color: #b0bccd;
+    line-height: 1.45;
+    margin-bottom: 0.8vw;
+  }
+  .agenda-card .who {
+    margin-top: auto;
+    font-size: 0.85vw;
+    color: #00d4ff;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    padding-top: 0.8vw;
+    border-top: 1px dashed rgba(0, 212, 255, 0.3);
+  }
+  .agenda-flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6vw;
+    margin-top: 1.5vw;
+    font-size: 0.95vw;
+    color: #8a96ad;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.05em;
+  }
+  .agenda-flow .arr { color: #00d4ff; }
+
+  /* ===== Generic layouts ===== */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2.5vw;
+    flex: 1;
+    align-items: start;
+  }
+  .two-col.tight { gap: 1.8vw; }
+  .three-col {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.6vw;
+    flex: 1;
+    align-items: start;
+  }
+
+  .card {
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 1.4vw;
+  }
+  .card.accent { border-color: rgba(0, 212, 255, 0.4); background: rgba(0, 212, 255, 0.06); }
+  .card.warn   { border-color: rgba(255, 71, 87, 0.4); background: rgba(255, 71, 87, 0.06); }
+  .card.safe   { border-color: rgba(0, 255, 136, 0.35); background: rgba(0, 255, 136, 0.05); }
+  .card.amber  { border-color: rgba(255, 170, 0, 0.4); background: rgba(255, 170, 0, 0.06); }
+
+  .card h4 {
+    font-size: 1.2vw;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 0.8vw;
+    letter-spacing: -0.01em;
+  }
+  .card p, .card li { font-size: 1vw; color: #b0bccd; line-height: 1.5; }
+
+  /* ===== Tables ===== */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 1vw;
+  }
+  th, td {
+    padding: 0.8vw 1vw;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  th {
+    font-weight: 600;
+    color: #00d4ff;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.8vw;
+    border-bottom: 2px solid rgba(0, 212, 255, 0.4);
+  }
+  td.metric { font-family: 'JetBrains Mono', monospace; font-weight: 500; }
+  td.col-tcp { color: #00d4ff; font-weight: 600; }
+  td.col-udp { color: #ffaa00; font-weight: 600; }
+  td.danger  { color: #ff4757; font-weight: 700; }
+  td.safe    { color: #00ff88; font-weight: 700; }
+
+  /* ===== Big number / hook ===== */
+  .big-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1.2vw;
+    text-align: center;
+  }
+  .big-stat .val {
+    font-size: 5.5vw;
+    font-weight: 800;
+    line-height: 1;
+    font-family: 'JetBrains Mono', monospace;
+    color: #00d4ff;
+  }
+  .big-stat .val.danger { color: #ff4757; }
+  .big-stat .val.safe   { color: #00ff88; }
+  .big-stat .val.amber  { color: #ffaa00; }
+  .big-stat .unit { font-size: 1.3vw; color: #8a96ad; margin-top: 0.4vw; }
+  .big-stat .lbl  { font-size: 0.95vw; color: #b0bccd; margin-top: 0.8vw; letter-spacing: 0.1em; text-transform: uppercase; }
+
+  /* ===== Callout ===== */
+  .callout {
+    border-left: 4px solid #ffaa00;
+    background: rgba(255, 170, 0, 0.08);
+    padding: 1vw 1.3vw;
+    border-radius: 0 8px 8px 0;
+    font-size: 1.05vw;
+    color: #ffe5b0;
+    margin: 0.8vw 0;
+    line-height: 1.5;
+  }
+  .callout strong { color: #ffaa00; }
+  .callout.cyan { border-color: #00d4ff; background: rgba(0, 212, 255, 0.08); color: #cfeefd; }
+  .callout.cyan strong { color: #00d4ff; }
+  .callout.red  { border-color: #ff4757; background: rgba(255, 71, 87, 0.1); color: #ffcfd5; }
+  .callout.red strong { color: #ff4757; }
+  .callout.green { border-color: #00ff88; background: rgba(0, 255, 136, 0.07); color: #c8f5dc; }
+  .callout.green strong { color: #00ff88; }
+
+  /* ===== Timeline (4 delays) ===== */
+  .timeline {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin: 1.2vw 0;
+  }
+  .timeline .step {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 1vw;
+    text-align: center;
+    position: relative;
+  }
+  .timeline .step:first-child { border-radius: 8px 0 0 8px; }
+  .timeline .step:last-child  { border-radius: 0 8px 8px 0; }
+  .timeline .step + .step { border-left: none; }
+  .timeline .step.hot {
+    background: rgba(255, 71, 87, 0.12);
+    border-color: rgba(255, 71, 87, 0.45);
+  }
+  .timeline .step .name {
+    font-size: 1vw;
+    font-weight: 600;
+    color: #ffffff;
+    margin-bottom: 0.3vw;
+  }
+  .timeline .step.hot .name { color: #ff4757; }
+  .timeline .step .micro {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85vw;
+    color: #00d4ff;
+  }
+  .timeline .step.hot .micro { color: #ff4757; }
+  .timeline .step .desc {
+    font-size: 0.78vw;
+    color: #8a96ad;
+    margin-top: 0.4vw;
+    line-height: 1.4;
+  }
+
+  /* ===== Architecture box ===== */
+  .arch {
+    background: #0a0f1f;
+    border: 1px solid rgba(0, 212, 255, 0.25);
+    border-radius: 10px;
+    padding: 1.2vw 1.5vw;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.95vw;
+    line-height: 1.85;
+    color: #d8dee9;
+    white-space: pre;
+  }
+  .arch .c  { color: #00d4ff; }
+  .arch .a  { color: #ffaa00; }
+  .arch .g  { color: #00ff88; }
+  .arch .r  { color: #ff4757; }
+  .arch .gr { color: #5a6577; }
+  .arch .w  { color: #ffffff; font-weight: 600; }
+
+  /* ===== Bar chart (P99 explosion) ===== */
+  .bar-chart {
+    display: flex;
+    align-items: flex-end;
+    height: 18vw;
+    gap: 4vw;
+    margin: 1vw 0 0.5vw;
+    padding: 0 3vw 1vw 3vw;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.15);
+    justify-content: center;
+  }
+  .bar-chart .bar-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 0 0 auto;
+    width: 8vw;
+    height: 100%;
+    justify-content: flex-end;
+  }
+  .bar-chart .bar {
+    width: 100%;
+    border-radius: 6px 6px 0 0;
+    position: relative;
+    transition: height 0.4s;
+  }
+  .bar-chart .bar.tcp { background: linear-gradient(180deg, #ff4757 0%, #aa1a25 100%); }
+  .bar-chart .bar.udp { background: linear-gradient(180deg, #ffaa00 0%, #c47a00 100%); }
+  .bar-chart .bar .val-top {
+    position: absolute;
+    top: -1.6vw;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1vw;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .bar-chart .bar.tcp .val-top { color: #ff4757; }
+  .bar-chart .bar.udp .val-top { color: #ffaa00; }
+  .bar-chart .bar-label {
+    margin-top: 0.6vw;
+    font-size: 1vw;
+    font-weight: 700;
+    color: #d8dee9;
+    letter-spacing: 0.05em;
+  }
+  .bar-axis-label {
+    text-align: center;
+    font-size: 0.85vw;
+    color: #8a96ad;
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 0.4vw;
+  }
+
+  /* ===== Curve (queuing) ===== */
+  .queue-curve {
+    width: 100%;
+    height: 14vw;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    position: relative;
+    overflow: hidden;
+  }
+  .queue-curve svg { width: 100%; height: 100%; display: block; }
+
+  /* ===== Stack diagram ===== */
+  .stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4vw;
+    margin-top: 0.5vw;
+  }
+  .stack-layer {
+    display: flex;
+    align-items: center;
+    gap: 1.2vw;
+    background: rgba(255, 255, 255, 0.03);
+    border-left: 4px solid #00d4ff;
+    padding: 0.9vw 1.2vw;
+    border-radius: 0 8px 8px 0;
+  }
+  .stack-layer.hot {
+    border-left-color: #ff4757;
+    background: rgba(255, 71, 87, 0.08);
+  }
+  .stack-layer .layer-name {
+    font-weight: 700;
+    color: #00d4ff;
+    width: 13vw;
+    font-size: 1vw;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .stack-layer.hot .layer-name { color: #ff4757; }
+  .stack-layer .layer-tech {
+    color: #d8dee9;
+    font-size: 1vw;
+    flex: 1;
+  }
+  .stack-layer .layer-tech .mono { color: #ffaa00; }
+  .stack-layer .layer-cost {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.95vw;
+    color: #00d4ff;
+    font-weight: 700;
+    min-width: 6vw;
+    text-align: right;
+  }
+  .stack-layer.hot .layer-cost { color: #ff4757; }
+
+  /* ===== Conclusion takeaway ===== */
+  .takeaway-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.2vw;
+    flex: 1;
+  }
+  .takeaway {
+    background: rgba(255, 255, 255, 0.03);
+    border-top: 3px solid #00d4ff;
+    border-radius: 0 0 10px 10px;
+    padding: 1.2vw 1.4vw;
+    display: flex;
+    flex-direction: column;
+  }
+  .takeaway .num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 2vw;
+    font-weight: 800;
+    color: #00d4ff;
+    line-height: 1;
+    margin-bottom: 0.6vw;
+  }
+  .takeaway h4 {
+    font-size: 1.1vw;
+    font-weight: 700;
+    margin-bottom: 0.5vw;
+    color: #ffffff;
+  }
+  .takeaway p { font-size: 0.95vw; color: #b0bccd; line-height: 1.5; }
+
+  /* ===== Handoff line ===== */
+  .handoff {
+    margin-top: auto;
+    padding: 0.9vw 1.2vw;
+    border-radius: 8px;
+    background: linear-gradient(90deg, rgba(0, 212, 255, 0.12) 0%, rgba(0, 212, 255, 0.02) 100%);
+    border-left: 3px solid #00d4ff;
+    font-size: 1vw;
+    color: #cfeefd;
+    font-style: italic;
+  }
+  .handoff strong { color: #00d4ff; font-style: normal; }
+
+  /* ===== End slide ===== */
+  .end-slide {
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  .end-slide .qa {
+    font-size: 7vw;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    background: linear-gradient(135deg, #ffffff 0%, #00d4ff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 1vw;
+  }
+  .end-slide .thanks {
+    font-size: 1.4vw;
+    color: #b0bccd;
+    margin-bottom: 2vw;
+  }
+  .end-slide .refs {
+    text-align: left;
+    max-width: 70%;
+    font-size: 0.9vw;
+    color: #8a96ad;
+    line-height: 1.7;
+  }
+  .end-slide .refs strong { color: #00d4ff; }
+
+  /* ===== Section header (full-page) ===== */
+  .section-cover {
+    align-items: flex-start;
+    justify-content: center;
+  }
+  .section-cover .part-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1vw;
+    letter-spacing: 0.4em;
+    color: #00d4ff;
+    margin-bottom: 1.2vw;
+  }
+  .section-cover .part-title {
+    font-size: 4vw;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: #ffffff;
+    line-height: 1.05;
+    margin-bottom: 1.2vw;
+    max-width: 85%;
+  }
+  .section-cover .part-title em { color: #00d4ff; font-style: normal; }
+  .section-cover .part-sub {
+    font-size: 1.4vw;
+    color: #8a96ad;
+    max-width: 70%;
+    line-height: 1.4;
+  }
+  .section-cover .part-presenter {
+    margin-top: 2vw;
+    font-size: 1vw;
+    color: #00d4ff;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  /* ===== Navigation ===== */
+  .nav {
+    position: fixed;
+    bottom: 1vw;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 0.5vw;
+    align-items: center;
+    background: rgba(10, 14, 30, 0.85);
+    backdrop-filter: blur(10px);
+    padding: 0.4vw 1vw;
+    border-radius: 50px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 100;
+  }
+  .nav button {
+    background: transparent;
+    border: none;
+    color: #8a96ad;
+    cursor: pointer;
+    font-size: 1vw;
+    padding: 0.3vw 0.6vw;
+    border-radius: 4px;
+    transition: all 0.15s;
+  }
+  .nav button:hover { color: #00d4ff; background: rgba(0, 212, 255, 0.1); }
+  .nav .indicator {
+    font-family: 'JetBrains Mono', monospace;
+    color: #d8dee9;
+    font-size: 0.9vw;
+    padding: 0 0.8vw;
+    min-width: 4vw;
+    text-align: center;
+  }
+  .nav .indicator .total { color: #5a6577; }
+
+  /* Section progress (top bar) */
+  .progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #00d4ff 0%, #00ff88 100%);
+    z-index: 100;
+    transition: width 0.3s;
+  }
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+
+<div class="deck">
+
+  <!-- ===== SLIDE 1: Title ===== -->
+  <section class="slide title-slide active">
+    <div class="presenter-badge team">Final Presentation</div>
+    <div class="eyebrow">DCCS307 · Module 5 · Case Study Project</div>
+    <div class="mega">CN_Module5_Group7</div>
+    <div class="topic-line">
+      Topic &nbsp;·&nbsp;
+      <strong>Network Latency in High-Frequency Trading</strong>
+    </div>
+    <div class="sub">
+      A protocol-level study of <span style="color:#00d4ff;">TCP</span> vs <span style="color:#ffaa00;">UDP</span>,
+      kernel bypass, and how real exchanges trade microseconds for millions.
+    </div>
+    <div class="members-grid">
+      <div class="member"><div class="m-name">Boseok Kim</div><div class="m-role">Problem · Latency Analysis</div></div>
+      <div class="member"><div class="m-name">Jungha Kim</div><div class="m-role">Kernel Bypass Solutions</div></div>
+      <div class="member"><div class="m-name">Hanju Son</div><div class="m-role">Empirical Benchmark</div></div>
+      <div class="member"><div class="m-name">Junseo Lee</div><div class="m-role">Industry Applications</div></div>
+    </div>
+    <div class="meta">
+      <span>2026.05</span>
+      <span>·</span>
+      <span>Computer Networks</span>
+      <span>·</span>
+      <span>Group 07</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 2: Agenda ===== -->
+  <section class="slide">
+    <div class="presenter-badge team">Agenda · All</div>
+    <div class="section-tag">00 · Agenda</div>
+    <h3 class="slide-title">Four Parts, <span class="accent">One Question</span>: where do the microseconds go?</h3>
+
+    <div class="agenda-grid">
+      <div class="agenda-card">
+        <div class="num">PART 01</div>
+        <h4>The Problem</h4>
+        <p>What is HFT, why microseconds matter, and which of the four network delays we can actually control.</p>
+        <div class="who">Boseok Kim</div>
+      </div>
+      <div class="agenda-card">
+        <div class="num">PART 02</div>
+        <h4>The Solution</h4>
+        <p>Kernel bypass — how DPDK, OpenOnload, and RDMA attack the d_proc bottleneck.</p>
+        <div class="who">Jungha Kim</div>
+      </div>
+      <div class="agenda-card">
+        <div class="num">PART 03</div>
+        <h4>Our Experiment</h4>
+        <p>TCP vs UDP measured end-to-end with Docker + tc netem. Our primary data.</p>
+        <div class="who">Hanju Son</div>
+      </div>
+      <div class="agenda-card">
+        <div class="num">PART 04</div>
+        <h4>The Industry</h4>
+        <p>NASDAQ, CME, NYSE, Citadel — how the real world applies all of the above.</p>
+        <div class="who">Junseo Lee</div>
+      </div>
+    </div>
+
+    <div class="agenda-flow">
+      <span>Problem</span><span class="arr">→</span>
+      <span>Solution</span><span class="arr">→</span>
+      <span>Validation</span><span class="arr">→</span>
+      <span>Application</span>
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · The Microsecond Arms Race</span>
+      <span class="page-num">02 / 26</span>
+    </div>
+  </section>
+
+  <!-- =================================================================== -->
+  <!-- ===== PART 1: PROBLEM — Boseok Kim (Slides 3-7) =================== -->
+  <!-- =================================================================== -->
+
+  <!-- ===== SLIDE 3: What is HFT ===== -->
+  <section class="slide part-start">
+    <div class="presenter-badge">Part 1 · Boseok</div>
+    <div class="section-tag">01 · The Problem</div>
+    <h3 class="slide-title">What is HFT — and why does <span class="accent">1 μs</span> matter?</h3>
+
+    <div class="two-col">
+      <div>
+        <p style="margin-bottom: 1vw;">
+          <strong style="color:#00d4ff;">High-Frequency Trading</strong> is algorithmic, microsecond-scale
+          automated trading. Orders are decided and submitted by machines, not humans.
+        </p>
+        <ul>
+          <li><strong>~50%</strong> of all US equity trading volume is HFT.</li>
+          <li>A 1 ms latency advantage is worth roughly <strong style="color:#00d4ff;">tens of millions / year</strong> to a major bank.</li>
+          <li>Strategies live and die on <em>who arrives first</em>, not who is cleverest.</li>
+        </ul>
+        <div class="callout cyan" style="margin-top: 1.2vw;">
+          <strong>This is not a niche problem.</strong> It's a 50%-of-the-market problem.
+        </div>
+      </div>
+      <div>
+        <div class="big-stat">
+          <div class="val">~50%</div>
+          <div class="unit">of US equity volume</div>
+          <div class="lbl">Driven by HFT</div>
+        </div>
+        <div class="big-stat" style="margin-top: 1vw;">
+          <div class="val safe">Tens of $M</div>
+          <div class="unit">per year, per ms</div>
+          <div class="lbl">Industry estimates</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 1 — The Problem</span>
+      <span class="page-num">03 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 4: Tail latency ===== -->
+  <section class="slide">
+    <div class="presenter-badge">Part 1 · Boseok</div>
+    <div class="section-tag">01 · The Problem</div>
+    <h3 class="slide-title">Winner-Takes-All — <span class="warn">tail latency</span> beats mean</h3>
+
+    <div class="two-col">
+      <div>
+        <p style="margin-bottom: 1vw;">
+          When a price moves, only <strong style="color:#00d4ff;">the first arriving order</strong> takes the trade.
+          Second place wins nothing.
+        </p>
+        <ul>
+          <li>A system with mean <strong>100 μs</strong> but P99 of <strong style="color:#ff4757;">200 ms</strong>
+              is effectively unusable.</li>
+          <li>The mean lies. The tail is where the money lives — or evaporates.</li>
+          <li>Our target metric for the rest of the talk: <strong style="color:#00d4ff;">P99 RTT under packet loss</strong>.</li>
+        </ul>
+        <div class="callout red" style="margin-top: 1vw;">
+          <strong>HFT lives or dies at the tail</strong>, not at the average.
+        </div>
+      </div>
+      <div>
+        <div class="queue-curve">
+          <svg viewBox="0 0 400 220" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="distGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#00d4ff" stop-opacity="0.5"/>
+                <stop offset="100%" stop-color="#00d4ff" stop-opacity="0"/>
+              </linearGradient>
+              <linearGradient id="tailGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#ff4757" stop-opacity="0.6"/>
+                <stop offset="100%" stop-color="#ff4757" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <!-- main distribution -->
+            <path d="M 20 200 Q 90 200 130 60 Q 170 -20 220 200 Z" fill="url(#distGrad)" stroke="#00d4ff" stroke-width="2"/>
+            <!-- tail bump -->
+            <path d="M 280 200 Q 320 200 340 100 Q 360 60 370 200 Z" fill="url(#tailGrad)" stroke="#ff4757" stroke-width="2"/>
+            <!-- mean line -->
+            <line x1="160" y1="20" x2="160" y2="200" stroke="#00d4ff" stroke-width="1.5" stroke-dasharray="4 4"/>
+            <text x="165" y="35" fill="#00d4ff" font-size="11" font-family="JetBrains Mono">mean</text>
+            <!-- P99 line -->
+            <line x1="340" y1="20" x2="340" y2="200" stroke="#ff4757" stroke-width="1.5" stroke-dasharray="4 4"/>
+            <text x="295" y="35" fill="#ff4757" font-size="11" font-family="JetBrains Mono">P99 / P99.9</text>
+            <!-- baseline -->
+            <line x1="10" y1="200" x2="395" y2="200" stroke="#5a6577" stroke-width="1"/>
+            <text x="10" y="215" fill="#8a96ad" font-size="10" font-family="JetBrains Mono">fast</text>
+            <text x="370" y="215" fill="#8a96ad" font-size="10" font-family="JetBrains Mono">slow</text>
+          </svg>
+        </div>
+        <p style="font-size: 0.9vw; color: #8a96ad; margin-top: 0.8vw; text-align: center; font-style: italic;">
+          Latency is not Gaussian. The right tail is exactly the regime HFT cares about.
+        </p>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 1 — The Problem</span>
+      <span class="page-num">04 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 5: Four sources of delay ===== -->
+  <section class="slide">
+    <div class="presenter-badge">Part 1 · Boseok</div>
+    <div class="section-tag">01 · The Problem</div>
+    <h3 class="slide-title">The <span class="accent">Four Sources</span> of Network Delay</h3>
+
+    <p style="margin-bottom: 0.5vw;">From Kurose &amp; Ross — every packet pays four taxes on the way to its destination:</p>
+
+    <div class="timeline">
+      <div class="step">
+        <div class="name">d<sub>proc</sub></div>
+        <div class="micro">Processing</div>
+        <div class="desc">Header inspection, kernel TCP/IP, syscall &amp; copy overhead.</div>
+      </div>
+      <div class="step">
+        <div class="name">d<sub>queue</sub></div>
+        <div class="micro">Queuing</div>
+        <div class="desc">Time waiting in router / NIC buffers before transmission.</div>
+      </div>
+      <div class="step">
+        <div class="name">d<sub>trans</sub></div>
+        <div class="micro">Transmission</div>
+        <div class="desc">L / R — bits pushed onto the link at line rate.</div>
+      </div>
+      <div class="step">
+        <div class="name">d<sub>prop</sub></div>
+        <div class="micro">Propagation</div>
+        <div class="desc">d / s — signal traveling at near light-speed through fiber.</div>
+      </div>
+    </div>
+
+    <div class="callout cyan">
+      <strong>d<sub>total</sub> = d<sub>proc</sub> + d<sub>queue</sub> + d<sub>trans</sub> + d<sub>prop</sub></strong>
+      &nbsp;—&nbsp; this slide is the foundation for everything that follows.
+    </div>
+
+    <p style="font-size: 0.9vw; color: #5a6577; font-style: italic; margin-top: 0.5vw;">
+      Reference: Kurose &amp; Ross, <em>Computer Networking — A Top-Down Approach</em>, Chapter 1.
+    </p>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 1 — The Problem</span>
+      <span class="page-num">05 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 6: Which knobs can we turn ===== -->
+  <section class="slide">
+    <div class="presenter-badge">Part 1 · Boseok</div>
+    <div class="section-tag">01 · The Problem</div>
+    <h3 class="slide-title">Which of these can software <span class="accent">actually move</span>?</h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Delay</th>
+          <th>Control Lever</th>
+          <th>Domain</th>
+          <th>Project Relevance</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="metric"><strong>d<sub>prop</sub></strong></td>
+          <td>Co-location, microwave towers, hollow-core fiber</td>
+          <td>Real estate / physics</td>
+          <td style="color:#5a6577;">Fixed constant</td>
+        </tr>
+        <tr>
+          <td class="metric"><strong>d<sub>trans</sub></strong></td>
+          <td>10 / 40 / 100 GbE link upgrade</td>
+          <td>Infrastructure</td>
+          <td style="color:#5a6577;">Effectively constant</td>
+        </tr>
+        <tr style="background: rgba(0, 212, 255, 0.06);">
+          <td class="col-tcp"><strong>d<sub>proc</sub></strong></td>
+          <td>Kernel bypass — DPDK, OpenOnload, RDMA</td>
+          <td><strong style="color:#00d4ff;">Software</strong></td>
+          <td class="safe">Part 2 (Jungha)</td>
+        </tr>
+        <tr style="background: rgba(0, 212, 255, 0.06);">
+          <td class="col-tcp"><strong>d<sub>queue</sub></strong></td>
+          <td>Protocol choice, QoS, buffer sizing</td>
+          <td><strong style="color:#00d4ff;">Software</strong></td>
+          <td class="safe">Part 3 (Hanju)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout cyan" style="margin-top: 1.2vw;">
+      <strong>Light speed is fixed. Software isn't.</strong>
+      We can only optimize the two software-controlled delays — and they happen to be the two
+      that dominate microsecond-scale systems.
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 1 — The Problem</span>
+      <span class="page-num">06 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 7: d_queue is non-linear ===== -->
+  <section class="slide part-end">
+    <div class="presenter-badge">Part 1 · Boseok</div>
+    <div class="section-tag warn">01 · The Problem</div>
+    <h3 class="slide-title">d<sub>queue</sub> is <span class="warn">non-linear</span> — that's the real danger</h3>
+
+    <div class="two-col">
+      <div>
+        <p style="margin-bottom: 0.8vw;">
+          As traffic intensity <strong class="mono">ρ = La / R → 1</strong>, queuing delay does not grow linearly —
+          it <strong style="color:#ff4757;">explodes</strong>.
+        </p>
+        <ul>
+          <li>Average delay is fine until utilization approaches capacity.</li>
+          <li>Then a single burst of loss / re-tx forces buffers to back up — and tail latency goes from microseconds to <strong style="color:#ff4757;">milliseconds or worse</strong>.</li>
+          <li><strong>Flash Crash (2014):</strong> 10-year US Treasury fell 33–34 bp, then recovered, in ~10 minutes — a real-world demonstration of d<sub>queue</sub> non-linearity.</li>
+        </ul>
+        <div class="callout red" style="margin-top: 1vw;">
+          <strong>Average is fine until ρ → 1. Then everything explodes.</strong>
+        </div>
+      </div>
+      <div>
+        <div class="queue-curve">
+          <svg viewBox="0 0 400 220" preserveAspectRatio="none">
+            <!-- axes -->
+            <line x1="40" y1="200" x2="380" y2="200" stroke="#5a6577" stroke-width="1.5"/>
+            <line x1="40" y1="20"  x2="40"  y2="200" stroke="#5a6577" stroke-width="1.5"/>
+            <!-- curve: hyperbolic, blows up near rho=1 -->
+            <path d="M 40 195 L 100 192 L 160 186 L 220 175 L 270 155 L 310 120 L 340 70 L 358 30 L 365 20"
+                  fill="none" stroke="#ff4757" stroke-width="3"/>
+            <!-- asymptote -->
+            <line x1="365" y1="20" x2="365" y2="200" stroke="#ff4757" stroke-width="1" stroke-dasharray="3 3"/>
+            <text x="345" y="215" fill="#ff4757" font-size="11" font-family="JetBrains Mono">ρ = 1</text>
+            <text x="180" y="215" fill="#8a96ad" font-size="11" font-family="JetBrains Mono">Traffic intensity (La / R)</text>
+            <text x="15" y="105" fill="#8a96ad" font-size="11" font-family="JetBrains Mono" transform="rotate(-90 15 105)">queueing delay</text>
+            <text x="200" y="80" fill="#ff4757" font-size="13" font-weight="700" font-family="Inter">non-linear blowup</text>
+          </svg>
+        </div>
+        <p style="font-size: 0.85vw; color: #8a96ad; margin-top: 0.5vw; text-align: center; font-style: italic;">
+          Kurose &amp; Ross — packet queueing delay vs traffic intensity.
+        </p>
+      </div>
+    </div>
+
+    <div class="handoff">
+      <strong>Next →</strong> So how does the industry actually escape this kernel-level bottleneck?
+      <strong>Jungha</strong> will show you.
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 1 — The Problem</span>
+      <span class="page-num">07 / 26</span>
+    </div>
+  </section>
+
+  <!-- =================================================================== -->
+  <!-- ===== PART 2: SOLUTION — Jungha Kim (Slides 8-13) ================ -->
+  <!-- =================================================================== -->
+
+  <!-- ===== SLIDE 8: 1μs = Millions ===== -->
+  <section class="slide part-start">
+    <div class="presenter-badge">Part 2 · Jungha</div>
+    <div class="section-tag amber">02 · The Solution — Kernel Bypass</div>
+    <h3 class="slide-title">1 μs = Millions — <span class="amber">attack d<sub>proc</sub> first</span></h3>
+
+    <div class="two-col">
+      <div>
+        <p style="margin-bottom: 1vw;">
+          Boseok identified <strong style="color:#00d4ff;">d<sub>proc</sub></strong> as one of the two
+          software-controlled delays. In a standard TCP/IP stack, almost all of d<sub>proc</sub>
+          is spent <em>inside the Linux kernel</em>.
+        </p>
+        <ul>
+          <li>A single round-trip enters the kernel <strong>twice</strong> (RX + TX).</li>
+          <li>Each entry is 10–30 μs — <strong style="color:#ff4757;">20–60 μs wasted per round-trip</strong>.</li>
+          <li>Top firms target <strong>tick-to-trade &lt; 10 μs</strong> — impossible if the kernel is on the path.</li>
+        </ul>
+        <div class="callout">
+          <strong>The kernel is not slow because it's badly written.</strong>
+          It's slow <em>by design</em> — for safety, fairness, and generality.
+          HFT needs none of those.
+        </div>
+      </div>
+      <div class="big-stat">
+        <div class="val danger">20–60</div>
+        <div class="unit">μs wasted in the kernel — per RTT</div>
+        <div class="lbl">RX entry + TX entry</div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 2 — Kernel Bypass</span>
+      <span class="page-num">08 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 9: Kernel is the bottleneck ===== -->
+  <section class="slide">
+    <div class="presenter-badge">Part 2 · Jungha</div>
+    <div class="section-tag amber">02 · The Solution — Kernel Bypass</div>
+    <h3 class="slide-title">The Kernel <span class="warn">is</span> the Bottleneck</h3>
+
+    <p style="margin-bottom: 0.5vw;">A single trading round-trip, dissected — the red blocks are pure overhead:</p>
+
+    <div class="timeline">
+      <div class="step">
+        <div class="name">NIC Receive</div>
+        <div class="micro">≈ 1–3 μs</div>
+        <div class="desc">DMA into RX ring</div>
+      </div>
+      <div class="step hot">
+        <div class="name">Kernel TCP/IP (RX)</div>
+        <div class="micro">≈ 10–30 μs</div>
+        <div class="desc">Interrupt, copy, parse</div>
+      </div>
+      <div class="step">
+        <div class="name">Trading Logic</div>
+        <div class="micro">≈ 1–5 μs</div>
+        <div class="desc">The actual strategy</div>
+      </div>
+      <div class="step hot">
+        <div class="name">Kernel TCP/IP (TX)</div>
+        <div class="micro">≈ 10–30 μs</div>
+        <div class="desc">Build header, copy, schedule</div>
+      </div>
+      <div class="step">
+        <div class="name">NIC Transmit</div>
+        <div class="micro">≈ 1–3 μs</div>
+        <div class="desc">DMA out of TX ring</div>
+      </div>
+    </div>
+
+    <div class="callout red">
+      <strong>The strategy itself takes 1–5 μs.</strong>
+      The kernel takes <strong>20–60 μs</strong>. We are spending roughly 10× more time
+      shuffling packets than thinking about trades.
+    </div>
+
+    <p style="font-size: 0.85vw; color: #5a6577; font-style: italic; margin-top: 0.5vw;">
+      Source: industry whitepapers (Solarflare, Intel DPDK Programmer's Guide). Numbers depend on NIC, CPU, and tuning.
+    </p>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 2 — Kernel Bypass</span>
+      <span class="page-num">09 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 10: Why the kernel wastes microseconds ===== -->
+  <section class="slide">
+    <div class="presenter-badge">Part 2 · Jungha</div>
+    <div class="section-tag amber">02 · The Solution — Kernel Bypass</div>
+    <h3 class="slide-title">Why the Kernel Wastes <span class="warn">Microseconds</span></h3>
+
+    <div class="two-col tight">
+      <div class="card warn">
+        <h4 style="color:#ff4757;">① Interrupts</h4>
+        <p>Every incoming packet raises an IRQ. Context switch + cache pollution → cost per packet, not per batch.</p>
+      </div>
+      <div class="card warn">
+        <h4 style="color:#ff4757;">② Memory copies</h4>
+        <p>Packet copied from NIC ring → kernel sk_buff → user buffer. Each copy is hundreds of nanoseconds at best.</p>
+      </div>
+      <div class="card warn">
+        <h4 style="color:#ff4757;">③ Context switching</h4>
+        <p>System calls (recv / send) cross the user/kernel boundary. Each crossing flushes registers and TLB.</p>
+      </div>
+      <div class="card warn">
+        <h4 style="color:#ff4757;">④ Protocol processing</h4>
+        <p>TCP state machine, congestion control, checksum, scheduling — written for generality, not for 1 μs targets.</p>
+      </div>
+    </div>
+
+    <div class="callout cyan" style="margin-top: 1vw;">
+      <strong>If the kernel is the bottleneck, the answer is to skip it entirely.</strong>
+      That is exactly what kernel-bypass technologies do.
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 2 — Kernel Bypass</span>
+      <span class="page-num">10 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 11: Three bypass approaches ===== -->
+  <section class="slide">
+    <div class="presenter-badge">Part 2 · Jungha</div>
+    <div class="section-tag amber">02 · The Solution — Kernel Bypass</div>
+    <h3 class="slide-title">Three Bypass Approaches — <span class="accent">Performance vs Compatibility</span></h3>
+
+    <div class="three-col">
+      <div class="card accent">
+        <h4 style="color:#00d4ff;">OpenOnload</h4>
+        <p style="font-family:'JetBrains Mono',monospace; color:#00ff88; font-weight:700; margin-bottom:0.6vw;">≈ 1–3 μs</p>
+        <p>User-space TCP/IP stack injected via <span class="mono">LD_PRELOAD</span>. <strong>No code change</strong>. Requires Solarflare NIC.</p>
+        <p style="margin-top:0.6vw; font-size:0.85vw; color:#8a96ad;"><em>Best for: drop-in latency win.</em></p>
+      </div>
+      <div class="card accent">
+        <h4 style="color:#00d4ff;">DPDK</h4>
+        <p style="font-family:'JetBrains Mono',monospace; color:#00ff88; font-weight:700; margin-bottom:0.6vw;">&lt; 1 μs</p>
+        <p>Poll-mode driver. App owns the NIC directly. <strong>Full rewrite required</strong>. Huge pages, NUMA pinning, busy-poll cores.</p>
+        <p style="margin-top:0.6vw; font-size:0.85vw; color:#8a96ad;"><em>Best for: greenfield ultra-low latency.</em></p>
+      </div>
+      <div class="card accent">
+        <h4 style="color:#00d4ff;">RDMA</h4>
+        <p style="font-family:'JetBrains Mono',monospace; color:#00ff88; font-weight:700; margin-bottom:0.6vw;">≈ 1–2 μs</p>
+        <p>NIC writes directly to remote memory. Remote CPU not involved. Requires <strong>InfiniBand</strong> or <strong>RoCE</strong> fabric.</p>
+        <p style="margin-top:0.6vw; font-size:0.85vw; color:#8a96ad;"><em>Best for: intra-datacenter.</em></p>
+      </div>
+    </div>
+
+    <div class="callout" style="margin-top: 1.2vw;">
+      <strong>The trade is always the same:</strong> the more of the kernel you bypass,
+      the faster you go — and the more your code and hardware must change.
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 2 — Kernel Bypass</span>
+      <span class="page-num">11 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 12: Deep dive ===== -->
+  <section class="slide">
+    <div class="presenter-badge">Part 2 · Jungha</div>
+    <div class="section-tag amber">02 · The Solution — Kernel Bypass</div>
+    <h3 class="slide-title">Deep Dive — <span class="accent">How</span> each one skips the kernel</h3>
+
+    <div class="stack">
+      <div class="stack-layer">
+        <div class="layer-name">DPDK</div>
+        <div class="layer-tech">
+          <strong>Poll-mode driver</strong> — no interrupts. App busy-polls the NIC ring directly.
+          <span class="mono">Huge pages</span> avoid TLB misses. <span class="mono">NUMA pinning</span> keeps memory local.
+        </div>
+        <div class="layer-cost">&lt; 1 μs</div>
+      </div>
+      <div class="stack-layer">
+        <div class="layer-name">OpenOnload</div>
+        <div class="layer-tech">
+          User-space TCP/IP linked via <span class="mono">LD_PRELOAD</span> — existing
+          <span class="mono">recv()</span> / <span class="mono">send()</span> calls are rerouted.
+          Same socket API. Zero code change.
+        </div>
+        <div class="layer-cost">1–3 μs</div>
+      </div>
+      <div class="stack-layer">
+        <div class="layer-name">RDMA</div>
+        <div class="layer-tech">
+          NIC reads/writes remote process memory directly. <strong>Remote CPU bypassed entirely.</strong>
+          Uses verbs API (queue pairs, work requests) — not BSD sockets.
+        </div>
+        <div class="layer-cost">1–2 μs</div>
+      </div>
+      <div class="stack-layer hot">
+        <div class="layer-name">Standard TCP</div>
+        <div class="layer-tech">
+          For comparison — kernel handles every packet. Interrupts, copies, syscalls, protocol state.
+          Compatible with everything; fast at nothing.
+        </div>
+        <div class="layer-cost">30–60 μs</div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 2 — Kernel Bypass</span>
+      <span class="page-num">12 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 13: Comparative matrix ===== -->
+  <section class="slide part-end">
+    <div class="presenter-badge">Part 2 · Jungha</div>
+    <div class="section-tag amber">02 · The Solution — Kernel Bypass</div>
+    <h3 class="slide-title">Bottom Line: the <span class="accent">comparative matrix</span></h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Option</th>
+          <th>Latency</th>
+          <th>Code change</th>
+          <th>Hardware</th>
+          <th>Best for</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="col-tcp"><strong>Standard TCP/IP</strong></td>
+          <td class="metric danger">30–60 μs · HOL → 200 ms+ RTO on loss</td>
+          <td>None</td>
+          <td>Any NIC</td>
+          <td>Compatibility</td>
+        </tr>
+        <tr>
+          <td><strong>OpenOnload</strong></td>
+          <td class="metric safe">1–3 μs</td>
+          <td>None (LD_PRELOAD)</td>
+          <td>Solarflare NIC</td>
+          <td>Drop-in kernel bypass</td>
+        </tr>
+        <tr>
+          <td><strong>DPDK</strong></td>
+          <td class="metric safe">&lt; 1 μs</td>
+          <td class="danger">Full rewrite</td>
+          <td>DPDK-capable NIC</td>
+          <td>Greenfield ultra-low</td>
+        </tr>
+        <tr>
+          <td><strong>RDMA</strong></td>
+          <td class="metric safe">1–2 μs · zero-copy</td>
+          <td>New verbs API</td>
+          <td>InfiniBand / RoCE</td>
+          <td>Intra-datacenter</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout cyan" style="margin-top: 1.2vw;">
+      <strong>The more kernel you bypass, the faster you go — and the more your code and hardware must change.</strong>
+    </div>
+
+    <div class="handoff">
+      <strong>Next →</strong> These numbers are from industry whitepapers. But what about the
+      underlying <strong>TCP vs UDP</strong> gap? Can we measure it ourselves? <strong>Hanju</strong> ran the experiment.
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 2 — Kernel Bypass</span>
+      <span class="page-num">13 / 26</span>
+    </div>
+  </section>
+
+  <!-- =================================================================== -->
+  <!-- ===== PART 3: VALIDATION — Hanju Son (Slides 14-19) =============== -->
+  <!-- =================================================================== -->
+
+  <!-- ===== SLIDE 14: Experimental setup ===== -->
+  <section class="slide part-start">
+    <div class="presenter-badge">Part 3 · Hanju</div>
+    <div class="section-tag safe">03 · Empirical Validation</div>
+    <h3 class="slide-title">Our Setup — <span class="accent">Docker + tc netem</span></h3>
+
+    <div class="two-col">
+      <div>
+        <div class="arch"><span class="gr">┌─────────────────────────────┐</span>
+<span class="gr">│</span>  <span class="w">hft-client</span>   <span class="c">10.10.0.3</span>      <span class="gr">│</span>
+<span class="gr">└────────────┬────────────────┘</span>
+             <span class="gr">│</span>
+             <span class="gr">│</span>  Docker bridge <span class="c">10.10.0.0/24</span>
+             <span class="gr">│</span>  <span class="a">+ tc netem on server eth0</span>
+             <span class="gr">│</span>
+<span class="gr">┌────────────┴────────────────┐</span>
+<span class="gr">│</span>  <span class="w">hft-server</span>   <span class="c">10.10.0.2</span>      <span class="gr">│</span>
+<span class="gr">│</span>  <span class="g">TCP 8888</span>  +  <span class="a">UDP 8888</span>         <span class="gr">│</span>
+<span class="gr">└─────────────────────────────┘</span></div>
+        <p style="font-size:0.9vw; color:#8a96ad; margin-top:0.6vw; font-style:italic;">
+          A real NIC path — not loopback. tc netem on the server's egress gives us reproducible loss, delay, and jitter.
+        </p>
+      </div>
+      <div>
+        <div class="card">
+          <h4>Why Docker, not localhost?</h4>
+          <p>Loopback bypasses the NIC. We need a <strong style="color:#00d4ff;">real interface</strong> to observe protocol-level behavior.</p>
+        </div>
+        <div class="card" style="margin-top: 0.8vw;">
+          <h4>Why tc netem?</h4>
+          <p>Reproducible packet <strong>loss / delay / jitter</strong> injected at the kernel queueing discipline layer.</p>
+        </div>
+        <div class="card" style="margin-top: 0.8vw;">
+          <h4>What we built</h4>
+          <p>Python 3 + raw sockets + Docker. Pipe-delimited order protocol. 10,000 orders / run, 100 μs spacing.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout cyan" style="margin-top: 0.8vw;">
+      <strong>We built our own HFT simulator end-to-end.</strong>
+      This is our team's primary data.
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 3 — Empirical Validation</span>
+      <span class="page-num">14 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 15: Baseline ===== -->
+  <section class="slide">
+    <div class="presenter-badge">Part 3 · Hanju</div>
+    <div class="section-tag safe">03 · Empirical Validation</div>
+    <h3 class="slide-title">Baseline — <span class="safe">TCP ≈ UDP</span> (no loss)</h3>
+
+    <div class="two-col">
+      <div>
+        <table>
+          <thead>
+            <tr>
+              <th>Metric</th>
+              <th>TCP</th>
+              <th>UDP</th>
+              <th>Gap</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Mean RTT</td>
+              <td class="col-tcp metric">188.6 μs</td>
+              <td class="col-udp metric">178.0 μs</td>
+              <td class="metric">+10.6 μs</td>
+            </tr>
+            <tr>
+              <td>P99 RTT</td>
+              <td class="col-tcp metric">375.7 μs</td>
+              <td class="col-udp metric">386.1 μs</td>
+              <td class="metric">≈ 0</td>
+            </tr>
+            <tr>
+              <td>Delivered</td>
+              <td class="col-tcp metric">1000 / 1000</td>
+              <td class="col-udp metric">1000 / 1000</td>
+              <td>—</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout green" style="margin-top: 1.2vw;">
+          <strong>Without packet loss, the choice barely matters.</strong>
+          Both protocols look nearly identical — a ~10 μs gap on the mean.
+        </div>
+      </div>
+      <div class="big-stat">
+        <div class="val safe">≈ 0</div>
+        <div class="unit">μs P99 difference</div>
+        <div class="lbl">No loss, no jitter</div>
+        <p style="margin-top: 1.5vw; font-size: 1vw; color: #b0bccd; max-width: 80%;">
+          A naive reading would conclude "protocol choice doesn't matter for HFT".
+          Let's see what happens when we add <strong style="color:#ff4757;">1% packet loss</strong>.
+        </p>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 3 — Empirical Validation</span>
+      <span class="page-num">15 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 16: The bombshell ===== -->
+  <section class="slide">
+    <div class="presenter-badge">Part 3 · Hanju</div>
+    <div class="section-tag warn">03 · Empirical Validation</div>
+    <h3 class="slide-title">The Bombshell — <span class="warn">1% packet loss</span> changes everything</h3>
+
+    <div class="two-col tight">
+      <div>
+        <table>
+          <thead>
+            <tr>
+              <th>Metric</th>
+              <th>TCP</th>
+              <th>UDP</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Mean RTT</td>
+              <td class="col-tcp metric danger">2,306 μs</td>
+              <td class="col-udp metric">177.9 μs</td>
+            </tr>
+            <tr>
+              <td>P99 RTT</td>
+              <td class="col-tcp metric danger">204,812 μs</td>
+              <td class="col-udp metric">374.5 μs</td>
+            </tr>
+            <tr>
+              <td style="font-size:0.9vw;color:#8a96ad;">P99 (human)</td>
+              <td class="col-tcp metric danger">≈ <strong>205 ms</strong></td>
+              <td class="col-udp metric">≈ 0.37 ms</td>
+            </tr>
+            <tr>
+              <td>Delivered</td>
+              <td class="col-tcp metric">1000 / 1000</td>
+              <td class="col-udp metric">992 / 1000</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="callout red" style="margin-top: 1.2vw;">
+          <strong>TCP's P99 exploded by ~545×</strong> from a 1% loss rate.
+          UDP's tail barely moved.
+        </div>
+      </div>
+      <div>
+        <div class="bar-chart">
+          <div class="bar-col">
+            <div class="bar tcp" style="height: 95%;">
+              <div class="val-top">204,812 μs</div>
+            </div>
+            <div class="bar-label" style="color:#ff4757;">TCP P99</div>
+          </div>
+          <div class="bar-col">
+            <div class="bar udp" style="height: 0.5%; min-height: 4px;">
+              <div class="val-top">374.5 μs</div>
+            </div>
+            <div class="bar-label" style="color:#ffaa00;">UDP P99</div>
+          </div>
+        </div>
+        <div class="bar-axis-label">P99 round-trip latency under 1% packet loss</div>
+        <p style="text-align:center; font-size:1vw; color:#ff4757; font-weight:700; margin-top:0.8vw;">
+          TCP : UDP  ≈  545 : 1
+        </p>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 3 — Empirical Validation</span>
+      <span class="page-num">16 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 17: Why? RTO_min = 200ms ===== -->
+  <section class="slide">
+    <div class="presenter-badge">Part 3 · Hanju</div>
+    <div class="section-tag warn">03 · Empirical Validation</div>
+    <h3 class="slide-title">Why? <span class="warn">Linux RTO_min = 200 ms</span></h3>
+
+    <div class="two-col">
+      <div>
+        <p style="margin-bottom: 0.8vw;">
+          TCP cannot detect a lost packet faster than its <strong>Retransmission Timeout</strong>.
+          On Linux, the floor of that timeout is hardcoded:
+        </p>
+        <div class="arch" style="font-size:1vw;"><span class="gr">// net/ipv4/tcp.c (Linux kernel)</span>
+<span class="c">#define</span> <span class="w">TCP_RTO_MIN</span>   <span class="a">((unsigned)(HZ/5))</span>
+                            <span class="gr">// = 200 ms</span></div>
+        <p style="margin-top: 1vw;">
+          On a clean network, RTT is ~180 μs. But if a packet is lost,
+          TCP <em>waits at least 200 ms</em> before even retrying.
+        </p>
+        <div class="callout red" style="margin-top: 1vw;">
+          <strong>TCP guarantees delivery — but its guarantee mechanism is the latency.</strong>
+        </div>
+      </div>
+      <div>
+        <div class="card warn">
+          <h4 style="color:#ff4757;">The mechanism, step by step</h4>
+          <ol style="list-style:decimal; padding-left:1.4vw; color:#d8dee9; font-size:1vw; line-height:1.7;">
+            <li>Order packet sent.</li>
+            <li><strong>Lost</strong> by tc netem.</li>
+            <li>Receiver never sees it → no ACK.</li>
+            <li>Sender's RTO timer expires after <strong>≥ 200 ms</strong>.</li>
+            <li>Retransmit. ACK finally arrives.</li>
+            <li>RTT for that one order: <strong style="color:#ff4757;">~205 ms</strong>.</li>
+          </ol>
+        </div>
+        <div class="callout cyan" style="margin-top: 1vw;">
+          This is exactly Boseok's
+          <strong>d<sub>queue</sub> non-linear blowup</strong> — measured on our own machine.
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 3 — Empirical Validation</span>
+      <span class="page-num">17 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 18: UDP trade-off ===== -->
+  <section class="slide">
+    <div class="presenter-badge">Part 3 · Hanju</div>
+    <div class="section-tag safe">03 · Empirical Validation</div>
+    <h3 class="slide-title">UDP Trade-off — <span class="amber">8/1000 lost</span>, but the tail stays flat</h3>
+
+    <div class="two-col">
+      <div>
+        <ul>
+          <li>Under 1% loss, UDP loses <strong style="color:#ffaa00;">8 out of 1000</strong> orders.</li>
+          <li>The other <strong>992</strong> arrive with the same latency as the no-loss baseline.</li>
+          <li>UDP doesn't try to recover. <strong style="color:#00ff88;">That refusal is its speed.</strong></li>
+        </ul>
+        <div class="callout green" style="margin-top: 1vw;">
+          <strong>UDP refuses to wait. That refusal is its speed.</strong>
+        </div>
+        <table style="margin-top: 1.2vw;">
+          <thead>
+            <tr><th>For HFT…</th><th>Loss</th><th>205 ms tail</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Market data feed (price ticks)</td>
+              <td class="safe">Next tick fixes it</td>
+              <td class="danger">Trade opportunity gone</td>
+            </tr>
+            <tr>
+              <td>Order entry (sending a trade)</td>
+              <td class="danger">Lost order = lost trade</td>
+              <td>Tolerable (rarely happens)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <div class="card safe">
+          <h4 style="color:#00ff88;">The asymmetry, in plain terms</h4>
+          <p style="font-size:1.05vw; line-height:1.6;">
+            For a <strong style="color:#00d4ff;">market data feed</strong>, missing one price tick is recoverable —
+            the next update replaces it in microseconds.
+          </p>
+          <p style="font-size:1.05vw; line-height:1.6; margin-top:0.8vw;">
+            For the <em>same feed</em>, a 200 ms TCP stall is <strong style="color:#ff4757;">permanent</strong> —
+            during those 200 ms, the price has moved 1000+ times, and the trading opportunity is gone.
+          </p>
+        </div>
+        <div class="callout cyan" style="margin-top: 1vw;">
+          <strong>Different workloads, different protocols.</strong>
+          UDP for speed-critical broadcasts. TCP for correctness-critical orders.
+          The industry knows this — we'll see exactly how in Part 4.
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 3 — Empirical Validation</span>
+      <span class="page-num">18 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 19: What our data proves ===== -->
+  <section class="slide part-end">
+    <div class="presenter-badge">Part 3 · Hanju</div>
+    <div class="section-tag safe">03 · Empirical Validation</div>
+    <h3 class="slide-title">What Our Data <span class="safe">Proves</span></h3>
+
+    <div class="takeaway-grid">
+      <div class="takeaway" style="border-top-color:#00d4ff;">
+        <div class="num">01</div>
+        <h4>Boseok's theory, measured</h4>
+        <p>"d<sub>queue</sub> is non-linear" — confirmed. A 1% loss rate produced a
+          <strong style="color:#ff4757;">~545×</strong> blowup in P99 latency. ✓</p>
+      </div>
+      <div class="takeaway" style="border-top-color:#ffaa00;">
+        <div class="num">02</div>
+        <h4>Jungha's numbers, recoverable</h4>
+        <p>Standard TCP/IP at 30–60 μs (whitepaper) vs our 188 μs baseline — the gap is
+          Python interpreter overhead. <strong style="color:#00ff88;">Consistent ✓</strong></p>
+      </div>
+      <div class="takeaway" style="border-top-color:#00ff88;">
+        <div class="num">03</div>
+        <h4>TCP guarantees ≠ TCP fits</h4>
+        <p>TCP's reliability is real but its <em>mechanism</em> (RTO ≥ 200 ms) is incompatible
+          with sub-millisecond markets.</p>
+      </div>
+      <div class="takeaway" style="border-top-color:#ff4757;">
+        <div class="num">04</div>
+        <h4>UDP wins where loss is recoverable</h4>
+        <p>8 lost out of 1000 — but P99 stayed at 374 μs. <strong>Tail held flat under exactly the
+          stress that broke TCP.</strong></p>
+      </div>
+    </div>
+
+    <div class="handoff">
+      <strong>Next →</strong> Our numbers explain <em>why</em> real exchanges split their protocols.
+      <strong>Junseo</strong> will show you who, where, and how.
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 3 — Empirical Validation</span>
+      <span class="page-num">19 / 26</span>
+    </div>
+  </section>
+
+  <!-- =================================================================== -->
+  <!-- ===== PART 4: INDUSTRY — Junseo Lee (Slides 20-26) ================ -->
+  <!-- =================================================================== -->
+
+  <!-- ===== SLIDE 20: Split the protocol ===== -->
+  <section class="slide part-start">
+    <div class="presenter-badge">Part 4 · Junseo</div>
+    <div class="section-tag">04 · Industry Practice</div>
+    <h3 class="slide-title">The Industry's Answer — <span class="accent">split the protocol</span></h3>
+
+    <div class="two-col">
+      <div>
+        <div class="arch"><span class="gr">┌─────────────────────────────┐</span>
+<span class="gr">│</span>  <span class="w">Exchange Matching Engine</span>   <span class="gr">│</span>
+<span class="gr">└────────────┬────────────────┘</span>
+             <span class="gr">│</span>
+       <span class="gr">┌─────┴─────┐</span>
+       <span class="gr">│</span>           <span class="gr">│</span>
+   <span class="a">Market Data</span>   <span class="g">Order Entry</span>
+   <span class="gr">(broadcast)</span>   <span class="gr">(per-client)</span>
+       <span class="gr">│</span>           <span class="gr">│</span>
+   <span class="a">UDP multicast</span>  <span class="g">TCP / FIX / OUCH</span>
+   <span class="gr">(speed)</span>       <span class="gr">(reliability)</span></div>
+        <p style="font-size:0.9vw; color:#8a96ad; margin-top:0.6vw; font-style:italic;">
+          The matching engine doesn't pick a single protocol. It picks <em>two</em>, by purpose.
+        </p>
+      </div>
+      <div>
+        <div class="card amber">
+          <h4 style="color:#ffaa00;">UDP Multicast — Market Data</h4>
+          <p>Same prices broadcast to every subscriber simultaneously.
+            Loss is tolerable; <strong>head-of-line blocking is not</strong>.</p>
+        </div>
+        <div class="card accent" style="margin-top: 0.8vw;">
+          <h4>TCP / FIX / OUCH — Order Entry</h4>
+          <p>One order, sent once, must arrive. Reliability matters more than tail latency —
+            and TCP's tail is rare when there's no broadcast contention.</p>
+        </div>
+        <div class="callout cyan" style="margin-top: 1vw;">
+          <strong>Real exchanges don't pick TCP or UDP. They use both, by purpose.</strong>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 4 — Industry Practice</span>
+      <span class="page-num">20 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 21: Exchange case studies ===== -->
+  <section class="slide">
+    <div class="presenter-badge">Part 4 · Junseo</div>
+    <div class="section-tag">04 · Industry Practice</div>
+    <h3 class="slide-title">Three Exchanges — <span class="accent">same pattern</span></h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Exchange</th>
+          <th>Market Data</th>
+          <th>Order Entry</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>NASDAQ</strong></td>
+          <td class="col-udp"><strong>TotalView-ITCH</strong> over <span class="mono">MoldUDP64</span> — UDP multicast</td>
+          <td class="col-tcp"><strong>OUCH</strong> over TCP</td>
+        </tr>
+        <tr>
+          <td><strong>CME</strong> (Chicago Mercantile)</td>
+          <td class="col-udp"><strong>MDP 3.0</strong> — UDP multicast + SBE binary encoding</td>
+          <td class="col-tcp"><strong>iLink 3</strong> over TCP</td>
+        </tr>
+        <tr>
+          <td><strong>NYSE</strong></td>
+          <td class="col-udp"><strong>Pillar</strong> — UDP multicast, redundant A/B lines</td>
+          <td class="col-tcp"><strong>Pillar FIX Gateway</strong> over TCP</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout cyan" style="margin-top: 1.2vw;">
+      <strong>Every major exchange uses the same split:</strong> UDP multicast for the broadcast,
+      TCP for the per-client transactional path. Independently invented, independently the same answer.
+    </div>
+
+    <p style="font-size: 0.85vw; color: #5a6577; font-style: italic; margin-top: 0.5vw;">
+      Sources: NASDAQ TotalView-ITCH spec; CME MDP 3.0 documentation; NYSE Pillar technical docs.
+    </p>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 4 — Industry Practice</span>
+      <span class="page-num">21 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 22: CME hybrid ===== -->
+  <section class="slide">
+    <div class="presenter-badge">Part 4 · Junseo</div>
+    <div class="section-tag">04 · Industry Practice</div>
+    <h3 class="slide-title">The Clever Hybrid — <span class="accent">CME's UDP + TCP recovery</span></h3>
+
+    <div class="two-col">
+      <div>
+        <p style="margin-bottom: 0.8vw;">
+          CME's MDP 3.0 sends market data over <strong style="color:#ffaa00;">UDP multicast</strong>
+          with sequence numbers. Subscribers detect gaps and recover lost packets via a <strong style="color:#00d4ff;">separate TCP recovery channel</strong>.
+        </p>
+        <div class="arch" style="font-size:0.95vw;"><span class="a">UDP MC stream</span>:  <span class="g">… 100, 101, </span><span class="r">[lost]</span><span class="g">, 103, 104, 105 …</span>
+                                  <span class="gr">↑</span>
+                          subscriber sees gap
+                                  <span class="gr">↓</span>
+<span class="c">TCP recovery query</span>:  "send me seq 102"
+<span class="c">TCP recovery reply</span>:  &lt;seq 102 payload&gt;</div>
+      </div>
+      <div>
+        <div class="card safe">
+          <h4 style="color:#00ff88;">The result</h4>
+          <p>Hot path stays on UDP — <strong>no HOL blocking</strong>.</p>
+          <p style="margin-top: 0.6vw;">Recovery happens out-of-band on TCP — used <strong>only</strong> when a gap is detected.</p>
+          <p style="margin-top: 0.6vw;">Subscribers without gaps pay nothing for reliability they don't need.</p>
+        </div>
+        <div class="callout green" style="margin-top: 1vw;">
+          <strong>Best of both worlds</strong> — UDP speed, TCP recovery, no head-of-line blocking.
+        </div>
+      </div>
+    </div>
+
+    <p style="font-size: 0.85vw; color: #5a6577; font-style: italic; margin-top: 0.5vw;">
+      Source: CME Group, "MDP 3.0 Channel Recovery", official market data documentation.
+    </p>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 4 — Industry Practice</span>
+      <span class="page-num">22 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 23: Top HFT firms ===== -->
+  <section class="slide">
+    <div class="presenter-badge">Part 4 · Junseo</div>
+    <div class="section-tag">04 · Industry Practice</div>
+    <h3 class="slide-title">Top HFT Firms — <span class="accent">same pattern</span>, applied harder</h3>
+
+    <div class="two-col tight">
+      <div class="card accent">
+        <h4>Citadel Securities</h4>
+        <p>UDP multicast feeds. FPGA-accelerated decode. ~25% of US retail equity volume.</p>
+      </div>
+      <div class="card accent">
+        <h4>Jane Street</h4>
+        <p>Public engineering blog: "<strong>P99 latency is what we optimize, not mean</strong>." OCaml + kernel bypass.</p>
+      </div>
+      <div class="card accent">
+        <h4>Jump Trading</h4>
+        <p>Microwave network NY ↔ Chicago. Custom UDP-based protocols.</p>
+      </div>
+      <div class="card accent">
+        <h4>Virtu Financial</h4>
+        <p>Market making at exchange co-location. UDP for tick data, TCP for orders, RDMA internally.</p>
+      </div>
+    </div>
+
+    <div class="callout cyan" style="margin-top: 1.2vw;">
+      <strong>Same recipe at every firm:</strong> UDP for market data, TCP for orders, kernel bypass for both.
+      Jane Street's emphasis on P99 over mean is <em>exactly</em> what our experiment in Part 3 measured.
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 4 — Industry Practice</span>
+      <span class="page-num">23 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 24: Our data ↔ industry ===== -->
+  <section class="slide">
+    <div class="presenter-badge">Part 4 · Junseo</div>
+    <div class="section-tag">04 · Industry Practice</div>
+    <h3 class="slide-title">Our Data <span class="accent">↔</span> Industry Practice</h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:48%;">Our Experiment Said…</th>
+          <th>Industry Does…</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>TCP P99 explodes to <strong style="color:#ff4757;">205 ms</strong> under 1% loss</td>
+          <td>NASDAQ Market Data is <strong style="color:#ffaa00;">UDP multicast</strong> (MoldUDP64)</td>
+        </tr>
+        <tr>
+          <td>UDP loses 8/1000 but the tail stays flat at ~374 μs</td>
+          <td>CME runs <strong>UDP + TCP recovery only on gaps</strong> (MDP 3.0)</td>
+        </tr>
+        <tr>
+          <td>TCP guarantees delivery at the cost of tail latency</td>
+          <td>NYSE Order Entry = <strong style="color:#00d4ff;">TCP</strong> (correctness &gt; speed for orders)</td>
+        </tr>
+        <tr>
+          <td>Baseline (no loss): TCP ≈ UDP, ~10 μs gap</td>
+          <td>Both layers further accelerated via <strong>kernel bypass</strong> (Citadel, Virtu)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout cyan" style="margin-top: 1.2vw;">
+      <strong>We didn't just guess.</strong> We measured the exact trade-off the entire industry is built around.
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Part 4 — Industry Practice</span>
+      <span class="page-num">24 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 25: Conclusion ===== -->
+  <section class="slide">
+    <div class="presenter-badge">Part 4 · Junseo</div>
+    <div class="section-tag">05 · Conclusion</div>
+    <h3 class="slide-title">Conclusion &amp; <span class="accent">Future Directions</span></h3>
+
+    <div class="two-col">
+      <div>
+        <h4 style="font-size:1.2vw; color:#00d4ff; margin-bottom:0.8vw;">What we learned</h4>
+        <ul>
+          <li>HFT bottleneck is <strong>software</strong> — d<sub>proc</sub> + d<sub>queue</sub>, not physics.</li>
+          <li><strong>Kernel bypass</strong> (DPDK / OpenOnload / RDMA) attacks d<sub>proc</sub>.</li>
+          <li><strong>Protocol split</strong> (UDP + TCP) attacks d<sub>queue</sub> and tail latency.</li>
+          <li>Both layers must be optimized together — neither alone is enough.</li>
+        </ul>
+      </div>
+      <div>
+        <h4 style="font-size:1.2vw; color:#ffaa00; margin-bottom:0.8vw;">Future directions</h4>
+        <ul>
+          <li><strong>QUIC / SRT</strong> — user-space transports with built-in loss recovery.</li>
+          <li><strong>SmartNICs / P4-programmable switches</strong> — pushing logic into the network fabric.</li>
+          <li><strong>FPGA acceleration</strong> — tick-to-trade in hardware, at the cost of agility.</li>
+          <li>The next 5 years: how much of a trading strategy can fit inside the NIC itself?</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout cyan" style="margin-top: 1.2vw;">
+      <strong>1 μs is not just a number.</strong>
+      It's the difference between a profitable trade and a missed one — and the industry has built
+      an entire technology stack to chase it.
+    </div>
+
+    <div class="footer">
+      <span class="brand">Group 07 · Conclusion</span>
+      <span class="page-num">25 / 26</span>
+    </div>
+  </section>
+
+  <!-- ===== SLIDE 26: References & Q&A ===== -->
+  <section class="slide end-slide part-end">
+    <div class="presenter-badge team">Group 07</div>
+    <div class="qa">Q &amp; A</div>
+    <div class="thanks">Thank you. Offline Q&amp;A available after the session.</div>
+    <div class="refs">
+      <p><strong>Key References</strong></p>
+      <p>· Aquilina, Budish &amp; O'Neill (2022). <em>Quantifying the High-Frequency Trading "Arms Race"</em>. QJE.</p>
+      <p>· Lockwood et al. (2012). <em>A Low-Latency Library in FPGA Hardware for High-Frequency Trading</em>.</p>
+      <p>· Intel <em>DPDK Programmer's Guide</em>.</p>
+      <p>· CME Group — <em>MDP 3.0 Market Data Documentation</em>.</p>
+      <p>· NASDAQ — <em>TotalView-ITCH 5.0 Specification</em>.</p>
+      <p>· NYSE — <em>Pillar Gateway Technical Reference</em>.</p>
+      <p>· Kurose &amp; Ross, <em>Computer Networking — A Top-Down Approach</em>, Chapters 1, 3.</p>
+      <p style="margin-top:0.8vw;"><strong>Project Repo</strong> &nbsp;·&nbsp; github.com/Group07/Network_2026_1</p>
+    </div>
+    <div class="footer">
+      <span class="brand">Group 07 · The Microsecond Arms Race</span>
+      <span class="page-num">26 / 26</span>
+    </div>
+  </section>
+
+</div>
+
+<!-- ===== Navigation ===== -->
+<div class="nav">
+  <button onclick="go(-1)" title="Previous (←)">◀</button>
+  <div class="indicator"><span id="curr">1</span><span class="total"> / 26</span></div>
+  <button onclick="go(1)" title="Next (→)">▶</button>
+  <button onclick="toggleFull()" title="Fullscreen (F)" style="margin-left:0.5vw;">⛶</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+  let idx = 0;
+
+  function show(i) {
+    idx = (i + total) % total;
+    slides.forEach((s, n) => s.classList.toggle('active', n === idx));
+    document.getElementById('curr').textContent = idx + 1;
+    document.getElementById('progress').style.width = ((idx + 1) / total * 100) + '%';
+  }
+  function go(delta) { show(idx + delta); }
+  function toggleFull() {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+    else document.exitFullscreen();
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); go(1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(-1); }
+    else if (e.key === 'Home') show(0);
+    else if (e.key === 'End') show(total - 1);
+    else if (e.key.toLowerCase() === 'f') toggleFull();
+  });
+
+  // Click left/right halves to navigate
+  document.querySelector('.deck').addEventListener('click', e => {
+    if (e.target.closest('.nav, button')) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    go(e.clientX - rect.left < rect.width / 2 ? -1 : 1);
+  });
+
+  show(0);
+</script>
+
+</body>
+</html>

@@ -54,19 +54,20 @@ class OrderResponse:
         self.message = message
     
     def serialize(self) -> bytes:
+        safe_msg = self.message.replace('|', '/')
         data = (
             f"{self.timestamp_ns}|"
             f"{self.order_id}|"
             f"{self.status}|"
             f"{self.executed_price}|"
             f"{self.executed_qty}|"
-            f"{self.message}"
+            f"{safe_msg}"
         )
         return data.encode('utf-8')
-    
+
     @classmethod
     def deserialize(cls, data: bytes) -> "OrderResponse":
-        parts = data.decode('utf-8').split('|')
+        parts = data.decode('utf-8').split('|', 5)
         return cls(
             timestamp_ns=int(parts[0]),
             order_id=parts[1],
@@ -166,20 +167,20 @@ class OrderHandler:
             exec_price = trade.price
             exec_qty += trade.quantity
         
-        if remaining:
+        if order.order_type == OrderType.MARKET:
+            # MARKET 주문 잔량은 호가창에 등록하지 않고 취소
+            if exec_qty == 0:
+                status = "REJECTED"
+            elif exec_qty < order.quantity:
+                status = "PARTIALLY_FILLED"
+            else:
+                status = "FILLED"
+        elif remaining:
             self.exchange.add_order(order)
             status = "PARTIALLY_FILLED" if exec_qty > 0 else "PENDING"
         else:
             status = "FILLED"
-        
-        for trade in trades:
-            buy_order = self.exchange.get_order(trade.buy_order_id)
-            sell_order = self.exchange.get_order(trade.sell_order_id)
-            if buy_order:
-                buy_order.fill(trade.quantity, trade.price)
-            if sell_order:
-                sell_order.fill(trade.quantity, trade.price)
-        
+
         response = OrderResponse(
             timestamp_ns=time.time_ns(),
             order_id=order.order_id,
@@ -244,7 +245,12 @@ class DummyHandler:
         else:
             import random
             latency_us = random.uniform(self.min_latency_us, self.max_latency_us)
-            time.sleep(latency_us / 1_000_000)
+            # Windows time.sleep()는 sub-ms 정밀도가 부정확 → busy-wait 하이브리드
+            target = time.perf_counter() + latency_us / 1_000_000
+            if latency_us > 1000:
+                time.sleep((latency_us - 1000) / 1_000_000)
+            while time.perf_counter() < target:
+                pass
             
             self.order_count += 1
             response = OrderResponse(

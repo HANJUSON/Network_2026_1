@@ -4,7 +4,7 @@ import uuid
 from typing import List, Optional
 from src.protocol import OrderMessage, OrderSide, OrderType
 from src.client import create_client, HFTClientBase
-from src.utils import LatencyStats, ResultLogger, get_timestamp_ns
+from src.utils import LatencyStats, ResultLogger, get_timestamp_ns, precise_sleep_us
 
 
 class LatencyBenchmark:
@@ -47,15 +47,12 @@ class LatencyBenchmark:
         print(f"Warming up with {self.warmup_orders} orders...")
         for i in range(self.warmup_orders):
             order = self._create_random_order(f"WARMUP_{i}")
-            try:
-                self.client.send_order(order)
-            except Exception:
-                pass
+            self.client.send_order(order)
         print("Warmup complete.")
 
-    def run_single_test(self, num_orders: int, interval_us: float) -> LatencyStats:
+    def run_single_test(self, num_orders: int, interval_us: float) -> Optional[LatencyStats]:
         latencies: List[int] = []
-        
+
         for i in range(num_orders):
             order = self._create_random_order(f"ORDER_{i}")
             try:
@@ -63,11 +60,14 @@ class LatencyBenchmark:
                 latencies.append(latency_ns)
             except Exception as e:
                 latencies.append(-1)
-            
+
             if interval_us > 0:
-                time.sleep(interval_us / 1_000_000)
-        
+                precise_sleep_us(interval_us)
+
         valid_latencies = [l for l in latencies if l > 0]
+        if not valid_latencies:
+            print(f"WARNING: All {len(latencies)} orders failed or timed out.")
+            return None
         return LatencyStats(valid_latencies)
 
     def run(self):
@@ -97,9 +97,13 @@ class LatencyBenchmark:
             
             print(f"Running benchmark with {self.test_orders} orders...\n")
             stats = self.run_single_test(self.test_orders, self.interval_us)
-            
+
+            if stats is None:
+                print(f"Benchmark failed: no valid measurements for {self.protocol.upper()}.")
+                return None
+
             print(stats.summary())
-            
+
             self.logger.add_result(
                 protocol=self.protocol,
                 num_orders=self.test_orders,
@@ -111,7 +115,7 @@ class LatencyBenchmark:
                     "symbols": self.symbols,
                 }
             )
-            
+
             return stats
             
         except ConnectionRefusedError:

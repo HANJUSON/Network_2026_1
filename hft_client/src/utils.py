@@ -13,6 +13,17 @@ def get_timestamp_ns() -> int:
     return time.time_ns()
 
 
+def precise_sleep_us(microseconds: float) -> None:
+    # Windows time.sleep() 해상도는 ~1-15ms이므로 sub-ms는 busy-wait로 보정
+    if microseconds <= 0:
+        return
+    target = time.perf_counter() + microseconds / 1_000_000
+    if microseconds > 1000:
+        time.sleep((microseconds - 1000) / 1_000_000)
+    while time.perf_counter() < target:
+        pass
+
+
 def format_ns(ns: int) -> str:
     if ns >= 1_000_000_000:
         return f"{ns / 1_000_000_000:.3f}s"
@@ -154,6 +165,18 @@ class ResultLogger:
             print(f"Protocol: {result['protocol']}")
             print(f"Orders: {result['num_orders']}, Interval: {result['interval_us']}us")
             print(f"{'='*60}")
-            stats = LatencyStats([])
-            stats.__dict__.update(result['stats'])
-            print(stats.summary())
+            s = result['stats']
+            print(
+                f"LatencyStats(n={s['count']}):\n"
+                f"  Min:    {format_ns(s['min_ns'])}\n"
+                f"  Mean:   {format_ns(s['mean_ns'])}\n"
+                f"  Median: {format_ns(s['median_ns'])}\n"
+                f"  Std:    {format_ns(s['std_ns'])}\n"
+                f"  Max:    {format_ns(s['max_ns'])}\n"
+                f"  P50:    {format_ns(s['p50_ns'])}\n"
+                f"  P75:    {format_ns(s['p75_ns'])}\n"
+                f"  P90:    {format_ns(s['p90_ns'])}\n"
+                f"  P95:    {format_ns(s['p95_ns'])}\n"
+                f"  P99:    {format_ns(s['p99_ns'])}\n"
+                f"  P99.9:  {format_ns(s['p999_ns'])}"
+            )

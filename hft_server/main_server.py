@@ -48,6 +48,12 @@ class HFTPServer:
         self.client_count = 0
         self.udp_stats = {"requests": 0, "errors": 0}
         self.lock = threading.Lock()
+
+    def _process_data(self, data: bytes) -> bytes:
+        if self.use_dummy:
+            return self.dummy_handler.handle_order(data)
+        response, _ = self.handler.handle_order(data)
+        return response.serialize()
     
     def start(self):
         self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -125,12 +131,7 @@ class HFTPServer:
                     if not data:
                         break
                     
-                    if self.use_dummy:
-                        response_data = self.dummy_handler.handle_order(data)
-                    else:
-                        response, proc_time = self.handler.handle_order(data)
-                        response_data = response.serialize()
-                    
+                    response_data = self._process_data(data)
                     client_socket.sendall(response_data)
                     
                 except socket.timeout:
@@ -158,12 +159,7 @@ class HFTPServer:
                 with self.lock:
                     self.udp_stats["requests"] += 1
                 
-                if self.use_dummy:
-                    response_data = self.dummy_handler.handle_order(data)
-                else:
-                    response, proc_time = self.handler.handle_order(data)
-                    response_data = response.serialize()
-                
+                response_data = self._process_data(data)
                 self.udp_socket.sendto(response_data, address)
                 
             except socket.timeout:
@@ -213,48 +209,76 @@ class HFTPServer:
         }
 
 
+class AsyncUDPProtocol(asyncio.DatagramProtocol):
+    def __init__(self, handler: "OrderHandler"):
+        self.handler = handler
+        self.transport = None
+
+    def connection_made(self, transport):
+        self.transport = transport
+
+    def datagram_received(self, data, addr):
+        try:
+            response, _ = self.handler.handle_order(data)
+            self.transport.sendto(response.serialize(), addr)
+        except Exception:
+            pass
+
+    def error_received(self, exc):
+        pass
+
+
 class AsyncHFTPServer:
     def __init__(self, config: dict):
         self.host = config["server"]["host"]
         self.tcp_port = config["server"]["port"]
         self.udp_port = config["server"].get("udp_port", config["server"]["port"])
         self.buffer_size = config["performance"].get("buffer_size", 65536)
-        
+        self.tcp_nodelay = config["performance"].get("tcp_nodelay", True)
+
         symbols = config["order_book"]["symbols"]
         max_order_size = config["order_book"].get("max_order_size", 10000)
         min_order_size = config["order_book"].get("min_order_size", 1)
-        
+
         self.exchange = ExchangeState(symbols)
         validator = OrderValidator(symbols, max_order_size, min_order_size)
         self.handler = OrderHandler(self.exchange, validator)
-        
+
         self.server = None
+        self.udp_transport = None
         self.running = False
         self.client_count = 0
         self.udp_stats = {"requests": 0, "errors": 0}
-    
+        self.client_count_lock: Optional[asyncio.Lock] = None
+
     async def handle_tcp_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        sock = writer.get_extra_info('socket')
+        if sock and self.tcp_nodelay:
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
         address = writer.get_extra_info('peername')
-        self.client_count += 1
-        print(f"TCP Client connected: {address} (Total: {self.client_count})")
-        
+        async with self.client_count_lock:
+            self.client_count += 1
+            count = self.client_count
+        print(f"TCP Client connected: {address} (Total: {count})")
+
         try:
             while self.running:
                 try:
                     data = await asyncio.wait_for(reader.read(self.buffer_size), timeout=30.0)
                     if not data:
                         break
-                    
+
                     response, proc_time = self.handler.handle_order(data)
                     writer.write(response.serialize())
                     await writer.drain()
-                    
+
                 except asyncio.TimeoutError:
                     break
                 except Exception as e:
                     print(f"Error: {e}")
                     break
-                    
+
         except ConnectionResetError:
             pass
         except Exception as e:
@@ -262,26 +286,44 @@ class AsyncHFTPServer:
         finally:
             writer.close()
             await writer.wait_closed()
-            self.client_count -= 1
-            print(f"TCP Client disconnected: {address} (Total: {self.client_count})")
-    
+            async with self.client_count_lock:
+                self.client_count -= 1
+                count = self.client_count
+            print(f"TCP Client disconnected: {address} (Total: {count})")
+
     async def start(self):
+        self.client_count_lock = asyncio.Lock()
         self.server = await asyncio.start_server(
             self.handle_tcp_client, self.host, self.tcp_port
         )
+
+        loop = asyncio.get_event_loop()
+        self.udp_transport, _ = await loop.create_datagram_endpoint(
+            lambda: AsyncUDPProtocol(self.handler),
+            local_addr=(self.host, self.udp_port),
+        )
+
         self.running = True
-        
+
         print(f"=" * 60)
         print(f"Async HFTP Server Started")
         print(f"TCP Host: {self.host}:{self.tcp_port}")
         print(f"UDP Host: {self.host}:{self.udp_port}")
+        print(f"TCP Nodelay: {self.tcp_nodelay}")
         print(f"=" * 60)
-        
-        async with self.server:
-            await self.server.serve_forever()
-    
+
+        try:
+            async with self.server:
+                await self.server.serve_forever()
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            pass
+        finally:
+            await self.stop()
+
     async def stop(self):
         self.running = False
+        if self.udp_transport:
+            self.udp_transport.close()
         if self.server:
             self.server.close()
         print("Server stopped.")
@@ -342,7 +384,7 @@ def main():
         try:
             asyncio.run(server.start())
         except KeyboardInterrupt:
-            asyncio.run(server.stop())
+            pass
     else:
         server = HFTPServer(config)
         try:
