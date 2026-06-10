@@ -1,542 +1,473 @@
-# HFT 프로토콜 지연시간 벤치마크 - TCP vs UDP
+# TCP vs UDP for High-Frequency Trading: A Latency Deep-Dive
 
-컴퓨터 네트워크 Module 5 프로젝트 | Group 07
+**Computer Networks — Module 5 Project | Group 07**
 
----
-
-## 개요
-
-이 프로젝트는 **고빈도 거래(HFT, High-Frequency Trading) 시뮬레이션 시스템**을 구현하여, 거래 환경에서 **TCP**와 **UDP** 프로토콜의 지연시간(latency) 성능을 측정하고 비교합니다. 제어된 조건에서 주문 처리의 왕복 지연시간(RTT)을 측정하여, 시간 기반 금융 애플리케이션에서 네트워크 프로토콜 선택을 위한 실증적 데이터를 제공합니다.
-
-> **핵심 연구 질문**: 고빈도 거래 시스템에서 TCP와 UDP 중 어떤 프로토콜을 선택하는 것이 지연시간 성능에 더 큰 영향을 미치는가?
+> 📹 **Demo Video (required): https://youtu.be/AZ7Uc7IFcnU**
 
 ---
 
-## 빠른 시작
+## TL;DR
 
-### 방법 A — Docker (권장, 네트워크 분리 환경)
+We built a miniature high-frequency trading (HFT) exchange and benchmarked the same
+order flow over **TCP** and **UDP** inside an isolated Docker network, using `tc netem`
+to inject controlled packet loss. The headline result: under just **1% packet loss**,
+**TCP's tail latency (P99) explodes from 375 µs to 204 ms — a 545× degradation** — while
+UDP's P99 stays flat at 374 µs (at the cost of permanently dropping ~1% of orders). For a
+system where every microsecond is money, this is the difference between a filled order and
+a missed market.
 
-```bash
-# 1. 이미지 빌드
-docker compose build
+---
 
-# 2. 서버 시작
-docker compose up server -d
+## 1. The Problem
 
-# 3. 벤치마크 실행 (TCP + UDP 자동 비교)
-docker compose run --rm client
+In modern electronic markets, High-Frequency Trading firms compete on **latency**. They
+co-locate servers next to exchanges, buy specialized NICs, and shave nanoseconds wherever
+they can. At this scale, a decision usually treated as a footnote — *which transport
+protocol do we use?* — becomes a first-order design choice.
 
-# 4. 종료
-docker compose down
+The two candidates make opposite promises:
+
+- **TCP** guarantees reliable, in-order delivery. You never lose a byte. But that guarantee
+  is enforced by acknowledgements, retransmission timers, and **head-of-line blocking** —
+  mechanisms that can stall delivery when the network misbehaves.
+- **UDP** sends datagrams and forgets them. No handshake, no retransmission, an 8-byte
+  header instead of 20+. Minimal overhead — but a lost packet is simply *gone* unless the
+  application rebuilds reliability itself.
+
+The textbook trade-off is "TCP is reliable, UDP is fast." That framing is incomplete. The
+question this project actually answers is sharper:
+
+> **When the network degrades, what does TCP's reliability guarantee cost you in latency —
+> and is that cost acceptable for a latency-critical trading system?**
+
+A protocol that is 10 µs faster on average but occasionally stalls for 200 ms is, for an
+HFT system, *worse* than a protocol that is consistently predictable. **Determinism, not
+just the mean, is what matters.** This is the hypothesis we set out to measure.
+
+---
+
+## 2. The System Under Test
+
+To measure protocol behavior — and not the quirks of one machine — we implemented a
+client-server exchange and ran it across a real (virtual) network boundary.
+
+```mermaid
+flowchart LR
+    subgraph client_box["hft-client &nbsp;(10.10.0.3)"]
+        BM["Benchmark Engine<br/>warmup + test phases"]
+        CL["TCP / UDP Client<br/>perf_counter_ns RTT"]
+        BM --> CL
+    end
+    subgraph net["Docker bridge 10.10.0.0/24"]
+        TC["tc netem<br/>delay · jitter · loss"]
+    end
+    subgraph server_box["hft-server &nbsp;(10.10.0.2)"]
+        H["Order Handler<br/>+ Validator"]
+        OB["Order Book"]
+        MT["Matching Engine<br/>price-time priority"]
+        H --> OB --> MT
+    end
+    CL -- "order (pipe-delimited)" --> TC
+    TC -- "egress shaping" --> H
+    H -- "response" --> CL
 ```
 
-결과 JSON은 `hft_client/results/`에 자동 저장됩니다.
+**Server (`hft_server`)** — accepts orders over TCP (one thread per connection,
+`main_server.py:112`) and UDP (single-threaded `recvfrom` loop, `main_server.py:157`) on
+the same port. `TCP_NODELAY` is set to disable Nagle's algorithm so small order packets
+ship immediately. Each order flows through validation → order book → a price-time-priority
+matching engine, then a response is returned.
 
-### 방법 B — 로컬 직접 실행 (터미널 2개)
+**Client (`hft_client`)** — sends a warmup batch to stabilize caches and connections, then
+fires the timed test batch. For every order it records the round-trip time with
+`time.perf_counter_ns()` (`utils.py:9`), the highest-resolution monotonic clock Python
+exposes, and computes the full latency distribution (mean, median, P95, P99, P99.9).
 
-**터미널 1 — 서버:**
+### Why Docker, and not `localhost`?
+
+This is the most important methodological decision in the project. Benchmarking over
+`127.0.0.1` is **misleading**: the OS loopback path short-circuits the NIC and most of the
+network stack, so what you measure is Python socket-API overhead, not protocol behavior.
+
+Running the client and server in **separate Docker containers** forces traffic across two
+virtual Ethernet interfaces over a bridge network. Crucially, this lets us attach
+**`tc netem`** to the server's egress interface to inject *quantified* delay, jitter, and
+loss — turning "TCP is reliable" from a slogan into a measurable curve.
+
+```mermaid
+flowchart LR
+    A["Baseline<br/>(no shaping)"] --> B["delay 1ms"] --> C["delay 1ms<br/>+ jitter 500µs"] --> D["loss 1%"] --> E["loss 5%"] --> F["delay + loss<br/>(combined)"]
+```
+
+*Figure 0 — The six network scenarios, applied to the server's `eth0` egress via `tc netem`.*
+
+---
+
+## 3. Results
+
+All measurements below were taken in the Docker bridge environment over 1,000 orders per
+protocol. The full method is reproducible — see [§7 Running the Project](#7-running-the-project).
+
+### 3.1 Baseline — a clean network
+
+With no packet loss or added delay, the two protocols are nearly indistinguishable.
+
+```mermaid
+xychart-beta
+    title "Figure 1 — Latency distribution, baseline (no loss). Lower is better."
+    x-axis ["Min", "Mean", "Median", "P95", "P99"]
+    y-axis "Latency (microseconds)" 0 --> 420
+    bar [109.9, 188.6, 179.2, 263.9, 375.7]
+    bar [110.3, 178.0, 169.2, 253.1, 386.1]
+```
+
+*Figure 1 — First bar (left) = **TCP**, second bar = **UDP** at each percentile. On a clean
+network the curves overlap within ~10 µs; UDP is marginally faster on the body of the
+distribution, TCP marginally better at P99.*
+
+| Metric | TCP | UDP |
+|--------|-----|-----|
+| Min | 109.9 µs | 110.3 µs |
+| Mean | 188.6 µs | 178.0 µs |
+| Median | 179.2 µs | 169.2 µs |
+| P95 | 263.9 µs | 253.1 µs |
+| P99 | 375.7 µs | 386.1 µs |
+| Max | 795.0 µs | 830.7 µs |
+| Delivered | 1000 / 1000 | 1000 / 1000 |
+
+**Deduction:** On an ideal link, TCP's reliability machinery is effectively free — there is
+nothing to retransmit and nothing to reorder, so its overhead reduces to the same per-packet
+cost UDP pays. The "TCP is slower" intuition simply does not show up here. *The interesting
+behavior only appears when the network stops being ideal.*
+
+### 3.2 Under 1% packet loss — the divergence
+
+Now we apply `tc netem loss 1%` to the server egress and re-run the identical workload.
+
+```mermaid
+xychart-beta
+    title "Figure 2 — P99 tail latency under 1% loss (note the axis: microseconds)"
+    x-axis ["TCP", "UDP"]
+    y-axis "P99 latency (microseconds)" 0 --> 210000
+    bar [204812, 374.5]
+```
+
+*Figure 2 — Under 1% loss, **TCP's P99 reaches 204,812 µs (≈205 ms)** while **UDP's P99 is
+374.5 µs**. UDP's bar is so short it is nearly invisible against TCP's — and that invisibility
+**is the result**: UDP simply does not have a tail.*
+
+| Metric | TCP | UDP |
+|--------|-----|-----|
+| Min | 117.8 µs | 102.9 µs |
+| Mean | **2,306 µs** | **177.9 µs** |
+| Median | 194.0 µs | 172.9 µs |
+| P95 | 402.4 µs | 253.4 µs |
+| **P99** | **204,812 µs** | **374.5 µs** |
+| Max | 212,968 µs | 559.9 µs |
+| Delivered | **1000 / 1000** (retransmitted) | **992 / 1000** (8 lost) |
+
+Two facts stand out:
+
+1. TCP's **median barely moves** (179 → 194 µs). 99% of orders are completely unaffected.
+2. TCP's **P99 jumps 545×** (375 µs → 204,812 µs), and the Max confirms a ~213 ms stall.
+
+---
+
+## 4. Analysis & Trade-offs
+
+### 4.1 Why does TCP's tail explode by 545×?
+
+The mean and median tell us this is not a uniform slowdown — it is a small number of orders
+suffering an *enormous* delay. The cause is TCP's **retransmission timeout (RTO)**.
+
+When a segment is lost, TCP cannot deliver any later data to the application until the gap
+is filled — this is **head-of-line blocking** (RFC 793 §3.7). It waits for either duplicate
+ACKs (fast retransmit) or, failing that, for the RTO timer to fire. The RTO is computed from
+smoothed RTT estimates (RFC 6298), **but it is floored by a minimum value** — on Linux,
+`TCP_RTO_MIN` is **200 ms** (`tcp(7)`, `net/tcp.h`). On a microsecond-scale LAN where the
+real RTT is ~180 µs, a single tail loss that misses fast-retransmit therefore costs *at
+least* 200 ms — roughly **1,000× the normal RTT**.
+
+The logical chain:
+
+```
+1% of segments dropped
+  → the dropped order can't fast-retransmit (too few dup-ACKs at our packet rate)
+  → TCP falls back to the RTO timer
+  → RTO is clamped to TCP_RTO_MIN = 200 ms (Linux default)
+  → that order's RTT ≈ 205 ms
+  → at 1,000 orders, ~1% land in the tail → P99 = 204,812 µs ✓
+```
+
+The measured ~205 ms tail is not noise — it is the **predictable fingerprint of the 200 ms
+RTO floor**. This is the single most important finding of the project: TCP's reliability is
+real, but on a low-latency link it is enforced at a *granularity 1,000× coarser than the
+workload's own RTT*.
+
+### 4.2 What does UDP trade away?
+
+UDP shows no tail because it never waits — a lost datagram is never retransmitted. The cost
+is visible in the delivery count: **8 of 1,000 orders (0.8%) are simply gone**, with no
+notification. The surviving 992 orders are delivered with latency *identical to the
+loss-free baseline*.
+
+So the trade is explicit:
+
+| | TCP | UDP |
+|---|---|---|
+| Reliability | 100% delivered (eventually) | ~99% delivered, rest lost silently |
+| Tail latency under loss | **catastrophic** (200 ms+ stalls) | **flat** (unchanged from baseline) |
+| Determinism | low under loss | high |
+| Ordering | guaranteed | none |
+| Recovery responsibility | kernel (automatic) | application (must build it) |
+| Header overhead | 20+ bytes | 8 bytes |
+
+### 4.3 The deduction for an HFT system
+
+In high-frequency trading, a 205 ms stall is not "a slow order" — it is an *eternity*. The
+market has moved; the price the order was based on no longer exists; acting on a 205 ms-old
+quote can be worse than not acting at all. A **stale fill is often more damaging than a
+missed one.**
+
+This inverts the naïve reading of the data. TCP's "100% delivery" looks superior in a
+spreadsheet, but for latency-critical trading, **UDP's bounded, predictable latency is the
+more valuable property** — *provided* the application layer adds exactly the reliability it
+needs (e.g., sequence numbers, gap detection, selective replay) rather than inheriting TCP's
+one-size-fits-all recovery. This is precisely why real exchange and market-data protocols
+(e.g., multicast feeds) are overwhelmingly UDP-based.
+
+---
+
+## 5. Conclusion
+
+| If your priority is… | Choose | Because |
+|---|---|---|
+| Every message must arrive, latency is secondary | **TCP** | reliability is automatic and free on a clean link |
+| Bounded, predictable latency under degradation | **UDP** | no retransmission means no tail; loss is recoverable in-app |
+| Both | **UDP + app-layer reliability** | keep UDP's latency floor, add only the recovery you need |
+
+The core lesson is that **protocol choice is a latency-determinism decision, not a
+reliability decision.** On a perfect network the two are equivalent; the moment loss appears,
+TCP converts lost packets into multi-hundred-millisecond stalls, while UDP converts them into
+a small, measurable loss rate. For HFT, the second failure mode is the survivable one.
+
+### Limitations & future work
+
+- Results are from a Docker bridge on a single host; absolute numbers will differ on
+  physical NICs and across real links, though the *relative* behavior (the RTO-driven tail)
+  is determined by kernel defaults and should hold.
+- We did not implement application-layer reliability over UDP; quantifying *how much* of
+  TCP's robustness can be recovered while preserving the latency floor is the natural next
+  step.
+- Tuning `TCP_RTO_MIN`, enabling TCP fast-retransmit-friendly pacing, or testing QUIC would
+  let us probe the middle ground between the two extremes.
+
+---
+
+## 6. References
+
+1. **RFC 793** — *Transmission Control Protocol.* J. Postel, 1981. (Head-of-line blocking,
+   retransmission semantics.) https://www.rfc-editor.org/rfc/rfc793
+2. **RFC 768** — *User Datagram Protocol.* J. Postel, 1980. https://www.rfc-editor.org/rfc/rfc768
+3. **RFC 6298** — *Computing TCP's Retransmission Timer.* Paxson et al., 2011. (RTO
+   computation and the minimum-RTO requirement.) https://www.rfc-editor.org/rfc/rfc6298
+4. **RFC 896** — *Congestion Control in IP/TCP Internetworks.* J. Nagle, 1984. (Nagle's
+   algorithm, which `TCP_NODELAY` disables.) https://www.rfc-editor.org/rfc/rfc896
+5. **Linux `tcp(7)` man page** — `TCP_RTO_MIN` / `TCP_NODELAY` socket behavior.
+   https://man7.org/linux/man-pages/man7/tcp.7.html
+6. **Linux `tc-netem(8)` man page** — network emulation (delay, jitter, loss) used to shape
+   the test network. https://man7.org/linux/man-pages/man8/tc-netem.8.html
+
+---
+
+## 7. Running the Project
+
+> Everything below reproduces the measurements in §3. The Docker path is required to
+> reproduce the loss experiments; the local path is fine for a quick smoke test.
+
+### 7.1 Quick start — Docker (recommended)
+
+```bash
+docker compose build               # build images
+docker compose up server -d        # start the exchange server
+docker compose run --rm client     # run the TCP + UDP benchmark
+docker compose down                # tear down
+```
+
+Result JSON is written to `hft_client/results/` (volume-mounted to the host).
+
+### 7.2 Quick start — local (two terminals)
+
+**Terminal 1 — server:**
 ```bash
 cd hft_server
 python main_server.py
 ```
 
-**터미널 2 — 클라이언트:**
+**Terminal 2 — client:**
 ```bash
 cd hft_client
 pip install -r requirements.txt
 python main.py
 ```
 
----
+> ⚠️ Local `127.0.0.1` runs bypass the NIC and **cannot reproduce the loss experiments** —
+> use them only for a functional check (see §2, "Why Docker, and not `localhost`?").
 
-## 웹 대시보드 (실시간 모니터링)
+### 7.3 Reproducing the network scenarios (`tc netem`)
 
-브라우저에서 TCP/UDP 지연시간, 처리량, 손실률을 실시간으로 확인할 수 있는 대시보드입니다.
-
-### 1단계 — 이미지 빌드
-
-```bash
-docker compose build
-```
-
-### 2단계 — 서버 + 대시보드 시작
+With the server container running, shape its egress interface:
 
 ```bash
-docker compose up server web -d
-```
-
-- `hft-server` 컨테이너: 10.10.0.2 에서 TCP/UDP 주문 수신
-- `hft-web` 컨테이너: http://localhost:5000 에서 대시보드 제공
-
-시작 확인:
-
-```bash
-docker logs hft-server    # "Listening on 0.0.0.0:8888" 확인
-docker logs hft-web       # "Running on http://0.0.0.0:5000" 확인
-```
-
-### 3단계 — 브라우저 접속
-
-http://localhost:5000
-
-### 4단계 — 대시보드 설정 및 거래 시작
-
-| 필드 | Docker 사용 시 | 로컬 직접 실행 시 |
-|------|---------------|-----------------|
-| Server Host | `10.10.0.2` | `127.0.0.1` |
-| Port | `8888` | `8888` |
-| Protocol | TCP 또는 UDP | TCP 또는 UDP |
-| Orders / sec | 원하는 값 (예: 50) | 원하는 값 |
-| Network Condition | tc netem 조건 메모 (예: `loss 1%`) | 비워두기 |
-
-**▶ Start** 버튼을 클릭하면 거래가 시작되고 실시간 업데이트가 시작됩니다.
-
-### 5단계 — 네트워크 조건 변경 (선택)
-
-대시보드를 실행하는 동안 별도 터미널에서 서버 컨테이너에 tc netem 조건을 적용할 수 있습니다:
-
-```bash
-# 패킷 손실 1% 적용
-docker exec hft-server tc qdisc add dev eth0 root netem loss 1%
-
-# 고정 지연 1ms 적용
-docker exec hft-server tc qdisc add dev eth0 root netem delay 1ms
-
-# 조건 초기화
-docker exec hft-server tc qdisc del dev eth0 root 2>/dev/null; true
-```
-
-Network Condition 입력란에 현재 적용한 조건을 입력하면 대시보드 헤더에 태그로 표시됩니다.
-
-### 종료
-
-```bash
-docker compose down
-```
-
-### 대시보드 UI 설명
-
-| 항목 | 설명 |
-|------|------|
-| Total Orders | 전송된 전체 주문 수 (Success / Lost 분리 표시) |
-| Loss Rate | 타임아웃 주문 비율 (%) — 1% 초과 시 빨간색으로 강조 |
-| Throughput | 현재 초당 처리 주문 수 (ops/sec) |
-| P99 Latency | 99번째 백분위수 지연시간 — 1ms 초과 시 빨간색으로 강조 |
-| Min / Mean / Median / P95 | 지연시간 분포 지표 |
-| Latency Over Time | Mean(평균) vs P99 실시간 꺾은선 그래프 |
-| Latency Distribution | 구간별 주문 수 막대 히스토그램 |
-| Trade Log | 최근 100건 개별 주문 결과 (최대 20건/초 샘플링) |
-
-### 색상 가이드
-
-| 색상 | 의미 |
-|------|------|
-| 초록 (`#00ff88`) | 지연시간 300μs 미만 / BUY 주문 / 정상 |
-| 노란색 (`#ffaa00`) | 지연시간 300μs–1ms 경고 구간 |
-| 빨간색 (`#ff4757`) | 지연시간 1ms 초과 위험 / SELL / 손실(LOST) |
-| 청록 (`#00d4ff`) | TCP 프로토콜 뱃지 / 일반 수치 |
-| 주황 (`#ffaa00`) | UDP 프로토콜 뱃지 |
-
----
-
-## 실측 결과
-
-Docker 환경(컨테이너 간 bridge 네트워크)에서 1,000개 주문 기준으로 측정한 실제 결과입니다.
-
-### Baseline (패킷 손실 없음)
-
-| 지표 | TCP | UDP |
-|------|-----|-----|
-| Min | 109.9 μs | 110.3 μs |
-| Mean | 188.6 μs | 178.0 μs |
-| Median | 179.2 μs | 169.2 μs |
-| P95 | 263.9 μs | 253.1 μs |
-| P99 | 375.7 μs | 386.1 μs |
-| Max | 795.0 μs | 830.7 μs |
-| 수신 성공 | 1,000 / 1,000 | 1,000 / 1,000 |
-
-→ 손실이 없는 환경에서는 TCP와 UDP의 차이가 미미합니다. (평균 차이 약 10μs)
-
-### 패킷 손실 1% (tc netem `loss 1%` 적용)
-
-| 지표 | TCP | UDP |
-|------|-----|-----|
-| Min | 117.8 μs | 102.9 μs |
-| Mean | **2,306 μs** | **177.9 μs** |
-| Median | 194.0 μs | 172.9 μs |
-| P95 | 402.4 μs | 253.4 μs |
-| P99 | **204,812 μs** | **374.5 μs** |
-| Max | 212,968 μs | 559.9 μs |
-| 수신 성공 | **1,000 / 1,000** (재전송) | **992 / 1,000** (8개 손실) |
-
-→ 패킷 손실 1%만으로 TCP P99가 375μs → **204ms로 545배** 급등합니다.
-  Linux 기본 TCP 재전송 타이머(RTO minimum 200ms)가 원인입니다.
-  UDP는 손실된 8개를 포기하는 대신 나머지 992개의 지연시간은 손실 전과 동일하게 유지됩니다.
-
-**이것이 HFT 시스템에서 프로토콜 선택이 중요한 이유입니다.**
-
----
-
-## 프로젝트 구조
-
-```
-.
-├── hft_server/
-│   ├── main_server.py              # 서버 진입점
-│   ├── Dockerfile                  # Docker 이미지 정의
-│   ├── config/
-│   │   └── server_settings.json    # 서버 설정
-│   ├── src/
-│   │   ├── __init__.py
-│   │   ├── order_book.py           # 주문서 및 거래소 상태
-│   │   ├── matcher.py              # 주문 체결 로직
-│   │   └── handler.py              # 요청 처리 및 유효성 검사
-│   └── requirements.txt
-│
-├── hft_client/
-│   ├── main.py                     # 벤치마크 클라이언트 진입점
-│   ├── web_server.py               # 웹 대시보드 서버
-│   ├── Dockerfile                  # Docker 이미지 정의
-│   ├── config/
-│   │   ├── settings.json           # 클라이언트 설정 (로컬용)
-│   │   └── settings.docker.json    # 클라이언트 설정 (Docker용)
-│   ├── src/
-│   │   ├── __init__.py
-│   │   ├── protocol.py             # 주문 메시지 프로토콜
-│   │   ├── client.py               # TCP/UDP 클라이언트 구현
-│   │   ├── benchmark.py            # 지연시간 벤치마킹
-│   │   └── utils.py                # 유틸리티 및 통계
-│   ├── static/
-│   │   ├── css/style.css           # 대시보드 스타일
-│   │   └── js/app.js               # 대시보드 프론트엔드
-│   ├── templates/
-│   │   ├── trading.html            # 거래 대시보드
-│   │   └── trading_dashboard.html
-│   ├── results/                    # 벤치마크 결과 (JSON)
-│   └── requirements.txt
-│
-├── scripts/
-│   └── run_scenarios.sh            # 시나리오 자동 실행 스크립트
-│
-├── docker-compose.yml              # 컨테이너 구성
-└── CN_Module5_MidpointReport_Group07.md  # 프로젝트 보고서
-```
-
----
-
-## 로컬 실행 상세
-
-### 사전 요구사항
-
-- Python 3.8 이상
-
-### 서버 실행 옵션
-
-```bash
-cd hft_server
-
-# 기본 모드 (TCP 8888 + UDP 8888 동시 수신)
-python main_server.py
-
-# 비동기 모드 (asyncio 기반, 고동시성)
-python main_server.py --mode async
-
-# 더미 모드 (인위적 지연 100~500μs 추가)
-python main_server.py --dummy
-
-# 포트 분리
-python main_server.py --port 9999 --udp-port 9998
-```
-
-### 클라이언트 실행 옵션
-
-```bash
-cd hft_client
-pip install -r requirements.txt
-
-# TCP + UDP 비교 (기본)
-python main.py
-
-# 특정 프로토콜만
-python main.py --protocol tcp
-python main.py --protocol udp
-
-# 파라미터 커스텀 (주문 5,000개, 50μs 간격, 워밍업 50개)
-python main.py --orders 5000 --interval 50 --warmup 50
-```
-
-### 웹 대시보드 (로컬 직접 실행)
-
-```bash
-cd hft_client
-pip install -r requirements.txt
-python web_server.py
-# 브라우저에서 http://127.0.0.1:5000 접속
-# Server Host: 127.0.0.1, Port: 8888 로 설정 후 ▶ Start
-```
-
-Docker 환경에서 대시보드를 사용하는 방법은 위의 **웹 대시보드** 섹션을 참고하세요.
-
----
-
-## Docker 분리 환경 벤치마크 상세
-
-### 왜 Docker인가
-
-로컬 loopback(`127.0.0.1`)은 OS 커널이 NIC와 네트워크 스택을 우회하므로, 측정값이 "프로토콜 차이"가 아닌 "파이썬 소켓 API 오버헤드"에 가깝습니다. Docker bridge 네트워크는 두 컨테이너가 별도의 가상 이더넷 인터페이스를 통해 통신하고, **tc netem**으로 지연·손실·지터를 수치로 제어할 수 있습니다.
-
-### 아키텍처
-
-```
-[hft-client]  10.10.0.3
-      │
-      │  Docker bridge (10.10.0.0/24)
-      │  ← tc netem이 서버 eth0 egress에 적용됨
-      │
-[hft-server]  10.10.0.2
-```
-
-### 사전 준비
-
-- Docker Desktop (Windows 11: WSL2 백엔드 필요)
-  https://www.docker.com/products/docker-desktop/
-
-```bash
-docker --version   # 설치 확인
-```
-
-### 이미지 빌드
-
-```bash
-docker compose build
-```
-
-### 서버 시작
-
-```bash
-docker compose up server -d
-docker logs hft-server          # 서버 기동 확인
-```
-
-### 네트워크 조건 설정 (tc netem)
-
-```bash
-# 이전 조건 초기화 (새 조건 적용 전 항상 먼저 실행)
+# Always reset before applying a new condition
 docker exec hft-server tc qdisc del dev eth0 root 2>/dev/null; true
 
-# ── 시나리오 A: Baseline ───────────────────────────────────────
-# (초기화 후 아무것도 적용하지 않음)
-
-# ── 시나리오 B: 고정 지연 1ms ─────────────────────────────────
+# Scenario B — fixed delay 1ms
 docker exec hft-server tc qdisc add dev eth0 root netem delay 1ms
 
-# ── 시나리오 C: 지연 1ms + 지터 ±500μs ────────────────────────
+# Scenario C — delay 1ms + jitter ±500µs
 docker exec hft-server tc qdisc add dev eth0 root netem delay 1ms 500us distribution normal
 
-# ── 시나리오 D: 패킷 손실 1% ──────────────────────────────────
+# Scenario D — 1% packet loss   (reproduces Figure 2)
 docker exec hft-server tc qdisc add dev eth0 root netem loss 1%
 
-# ── 시나리오 E: 패킷 손실 5% ──────────────────────────────────
+# Scenario E — 5% packet loss
 docker exec hft-server tc qdisc add dev eth0 root netem loss 5%
 
-# ── 시나리오 F: 복합 (1ms 지연 + 0.5% 손실) ────────────────────
+# Scenario F — combined (1ms delay + 0.5% loss)
 docker exec hft-server tc qdisc add dev eth0 root netem delay 1ms loss 0.5%
 
-# 현재 적용 조건 확인
-docker exec hft-server tc qdisc show dev eth0
+docker exec hft-server tc qdisc show dev eth0   # inspect current condition
 ```
 
-### 벤치마크 실행
+Then run the benchmark and compare against the reset baseline:
 
 ```bash
-# TCP + UDP 비교 (기본, 10,000 주문)
-docker compose run --rm client
-
-# 주문 수 조정
-docker compose run --rm client python main.py --config config/settings.docker.json --orders 5000
-
-# 특정 프로토콜만
-docker compose run --rm client python main.py --config config/settings.docker.json --protocol tcp
-docker compose run --rm client python main.py --config config/settings.docker.json --protocol udp
+docker compose run --rm client python main.py --config config/settings.docker.json --orders 1000
 ```
 
-결과 JSON은 호스트의 `hft_client/results/`에 자동 저장됩니다 (볼륨 마운트).
-
-### 전체 시나리오 자동 실행
-
-6개 시나리오(Baseline → 복합)를 순서대로 자동 실행합니다.
+Run all six scenarios in sequence:
 
 ```bash
 bash scripts/run_scenarios.sh
 ```
 
-### 종료
+### 7.4 Live web dashboard (optional)
+
+A Flask-SocketIO dashboard streams TCP/UDP latency, throughput, and loss in real time.
 
 ```bash
-docker compose down
+docker compose up server web -d
+# then open http://localhost:5000
 ```
 
-### 시나리오별 예상 vs 실측 결과
+| Field | Docker | Local |
+|-------|--------|-------|
+| Server Host | `10.10.0.2` | `127.0.0.1` |
+| Port | `8888` | `8888` |
+| Protocol | TCP or UDP | TCP or UDP |
+| Orders / sec | e.g. `50` | e.g. `50` |
 
-| 시나리오 | 조건 | TCP 동작 | UDP 동작 |
-|---------|------|---------|---------|
-| Baseline | 없음 | ≈ UDP (평균 차이 ~10μs) | ≈ TCP |
-| 고정 지연 | delay 1ms | RTT +1ms | RTT +1ms |
-| 지터 | delay 1ms 500us | P99 상승, head-of-line blocking | P99 낮음, 주문별 독립 처리 |
-| 손실 1% | loss 1% | **P99 204ms** (재전송 타이머), 손실 0% | P99 374μs, **손실 ~1%** |
-| 손실 5% | loss 5% | P99 폭증 | 손실률 ~5% |
-| 복합 | delay+loss | 누적 악화 | 손실률 증가, 지연은 낮음 |
+Local dashboard only:
+
+```bash
+cd hft_client && pip install -r requirements.txt && python web_server.py
+# http://127.0.0.1:5000  →  Server Host 127.0.0.1, Port 8888  →  ▶ Start
+```
+
+### 7.5 Command-line options
+
+**Server:**
+```bash
+python main_server.py                       # sync mode, TCP + UDP on 8888
+python main_server.py --mode async          # asyncio backend
+python main_server.py --dummy               # inject artificial 100–500µs latency
+python main_server.py --port 9999 --udp-port 9998
+```
+
+**Client:**
+```bash
+python main.py                              # TCP + UDP (default)
+python main.py --protocol tcp               # single protocol
+python main.py --orders 5000 --interval 50 --warmup 50
+```
 
 ---
 
-## 설정 파일
+## 8. Configuration
 
-### 서버 (`hft_server/config/server_settings.json`)
+<details>
+<summary>Server — <code>hft_server/config/server_settings.json</code></summary>
 
 ```json
 {
-    "server": {
-        "host": "0.0.0.0",
-        "port": 8888,
-        "backlog": 100,
-        "max_connections": 1000
-    },
-    "performance": {
-        "tcp_nodelay": true,
-        "so_reuseaddr": true,
-        "buffer_size": 65536
-    },
-    "order_book": {
-        "symbols": ["BTC-USD", "ETH-USD", "AAPL"],
-        "max_order_size": 10000,
-        "min_order_size": 1
-    },
-    "simulation": {
-        "enabled": false,
-        "min_latency_us": 100,
-        "max_latency_us": 500
-    }
+    "server":      { "host": "0.0.0.0", "port": 8888, "backlog": 100, "max_connections": 1000 },
+    "performance": { "tcp_nodelay": true, "so_reuseaddr": true, "buffer_size": 65536 },
+    "order_book":  { "symbols": ["BTC-USD", "ETH-USD", "AAPL"], "max_order_size": 10000, "min_order_size": 1 },
+    "simulation":  { "enabled": false, "min_latency_us": 100, "max_latency_us": 500 }
 }
 ```
+</details>
 
-### 클라이언트 로컬 (`hft_client/config/settings.json`)
+<details>
+<summary>Client (Docker) — <code>hft_client/config/settings.docker.json</code></summary>
 
 ```json
 {
-    "server": {
-        "host": "127.0.0.1",
-        "port": 8888,
-        "protocol": "tcp"
-    },
-    "benchmark": {
-        "warmup_orders": 100,
-        "test_orders": 10000,
-        "interval_us": 100,
-        "save_results": true
-    }
+    "server":    { "host": "10.10.0.2", "port": 8888, "protocol": "tcp" },
+    "client":    { "tcp_nodelay": true, "socket_timeout_ms": 5000 },
+    "benchmark": { "warmup_orders": 100, "test_orders": 10000, "interval_us": 100, "save_results": true, "results_dir": "results" },
+    "symbols":   ["BTC-USD", "ETH-USD", "AAPL"]
 }
 ```
+</details>
 
-### 클라이언트 Docker (`hft_client/config/settings.docker.json`)
+The local client config (`hft_client/config/settings.json`) is identical except `host` is
+`127.0.0.1` and there is no `client` block.
 
-```json
-{
-    "server": {
-        "host": "10.10.0.2",
-        "port": 8888,
-        "protocol": "tcp"
-    },
-    "client": {
-        "tcp_nodelay": true,
-        "socket_timeout_ms": 5000
-    },
-    "benchmark": {
-        "warmup_orders": 100,
-        "test_orders": 10000,
-        "interval_us": 100,
-        "save_results": true,
-        "results_dir": "results"
-    },
-    "symbols": ["BTC-USD", "ETH-USD", "AAPL"]
-}
+---
+
+## 9. Project Structure
+
+```
+.
+├── hft_server/
+│   ├── main_server.py              # entry point — sync & async servers
+│   ├── config/server_settings.json
+│   └── src/
+│       ├── order_book.py           # exchange state, order book
+│       ├── matcher.py              # price-time priority matching
+│       └── handler.py              # request handling & validation
+│
+├── hft_client/
+│   ├── main.py                     # benchmark CLI entry point
+│   ├── web_server.py               # Flask-SocketIO dashboard
+│   ├── config/{settings,settings.docker}.json
+│   ├── src/
+│   │   ├── protocol.py             # order message protocol
+│   │   ├── client.py               # TCP / UDP clients
+│   │   ├── benchmark.py            # latency benchmark engine
+│   │   └── utils.py                # stats & RTT clock (perf_counter_ns)
+│   ├── static/  templates/         # dashboard front-end
+│   └── results/                    # benchmark output (JSON)
+│
+├── scripts/run_scenarios.sh        # runs all six netem scenarios
+│
+├── presentation/                   # report & presentation assets
+│   ├── CN_Module5_MidpointReport_Group07.md / .pdf
+│   ├── PLAN.md   presentation.html
+│   └── scripts/01_boseok.md … 04_junseo.md
+│
+├── bugreport.md   team_summary.html
+└── docker-compose.yml
 ```
 
 ---
 
-## 프로토콜 비교 방법론
+## Course Information
 
-| 기능 | TCP | UDP |
-|------|-----|-----|
-| 신뢰성 | 보장됨 (재전송) | 최선 노력 |
-| 순서 보장 | 보장됨 | 없음 |
-| 혼잡 제어 | 있음 | 없음 |
-| 연결 상태 | 필요 | 불필요 |
-| 헤더 오버헤드 | 20+ 바이트 | 8 바이트 |
-| 재전송 타이머 | 최소 200ms (Linux RTO) | 없음 |
-| 구현 복잡도 | 낮음 | 높음 |
+**Course:** Computer Networks · **Module:** Module 5 — Transport Layer Protocols ·
+**Group:** Group 07 · **Year:** 2026
 
-### 벤치마크 프로세스
-
-1. **웜업 단계**: 100개 주문으로 캐시 및 커넥션 상태 안정화
-2. **테스트 단계**: 100μs 간격으로 10,000개 주문 전송, 각 주문의 RTT를 `time.perf_counter_ns()`로 측정
-3. **분석 단계**: 통계 계산 (평균, 중앙값, P95, P99, 표준편차)
-
-### 수집 지표
-
-- 평균(Mean), 중앙값(Median), P95, P99, P99.9
-- 최소/최대 지연시간
-- 표준편차
-- 수신 성공률 (UDP 손실 감지)
-
----
-
-## 주요 기능
-
-### 서버 (hft_server)
-
-- 멀티스레드 TCP / 단일스레드 UDP 동시 처리
-- 가격-시간 우선순위 기반 주문서(Order Book) 관리
-- 주문 체결 엔진 (시장가/지정가)
-- 인위적 지연 설정 가능한 더미 모드 (`--dummy`)
-- 다중 거래 심볼 지원 (BTC-USD, ETH-USD, AAPL)
-- Python asyncio 기반 비동기 모드 (`--mode async`)
-
-### 클라이언트 (hft_client)
-
-- 자동화된 지연시간 벤치마킹 (TCP/UDP 비교)
-- 웜업 및 테스트 주문 수 설정 가능
-- 통계 분석 (평균, 중앙값, P95, P99, 표준편차)
-- JSON 결과 로깅 (`hft_client/results/`)
-- Flask-SocketIO 기반 실시간 웹 대시보드
-
----
-
-## 사용 기술
-
-- **Python 3** (서버: 표준 라이브러리만 사용)
-- **Flask** + **Flask-SocketIO** (웹 대시보드)
-- **소켓 프로그래밍** (TCP/UDP)
-- **스레딩** & **asyncio** (동시성 처리)
-- **Docker** + **tc netem** (네트워크 조건 제어)
-- **JSON** (설정 및 결과 저장)
-
----
-
-## 교과목 정보
-
-- **교과목**: 컴퓨터 네트워크 (Computer Networks)
-- **모듈**: Module 5 — 전송 계층 프로토콜
-- **프로젝트**: 중간 보고서
-- **팀**: Group 07
-- **연도**: 2026
-
-## 라이선스
-
-이 프로젝트는 컴퓨터 네트워크 교과목의 교육 목적으로 제작되었습니다.
-
-## 참고 문헌
-
-1. RFC 793 — Transmission Control Protocol
-2. RFC 768 — User Datagram Protocol
-3. 고빈도 거래 관련 학술 문헌
-4. 저지연 거래 시스템의 업계 모범 사례
+Educational project. Built with Python 3 (server uses the standard library only),
+Flask-SocketIO (dashboard), and Docker + `tc netem` (network emulation).
